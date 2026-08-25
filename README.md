@@ -4,7 +4,7 @@
 ![OpenAI](https://img.shields.io/badge/GPT--4o_mini-412991?style=flat&logo=openai&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=flat&logo=pandas&logoColor=white)
 ![BeautifulSoup](https://img.shields.io/badge/BeautifulSoup4-43B02A?style=flat&logo=python&logoColor=white)
-![PyPDF2](https://img.shields.io/badge/PyPDF2-FF0000?style=flat&logo=adobeacrobatreader&logoColor=white)
+![pypdf](https://img.shields.io/badge/pypdf-FF0000?style=flat&logo=adobeacrobatreader&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=flat&logo=jupyter&logoColor=white)
 ![Google Colab](https://img.shields.io/badge/Google_Colab-F9AB00?style=flat&logo=googlecolab&logoColor=white)
 
@@ -27,7 +27,7 @@ flowchart LR
 
     subgraph proc["Processing"]
         B1["Web Scraping\nBeautifulSoup"]
-        B2["PDF Extraction\nPyPDF2"]
+        B2["PDF Extraction\npypdf"]
         B3["LLM Extraction\nGPT-4o mini"]
     end
 
@@ -100,33 +100,116 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 
 ```
 ├── notebooks/
-│   └── EMA_data_scraping.ipynb   # Main notebook (Google Colab)
+│   └── EMA_data_scraping.ipynb      # Main notebook (Colab or local Jupyter)
 ├── scripts/
-│   ├── config.py                 # Shared config: HTTP headers, OpenAI client
-│   ├── scrape_data_fromEPAR.py   # EPAR page scraper
-│   ├── scrape_data_fromNICE.py   # NICE search scraper
-│   ├── scrape_data_fromMH_with_LLM.py  # Meeting Highlights + LLM pipeline
-│   ├── scrape_data_fromSHEET.py  # Medicine list lookup
-│   ├── scrape_therapy_area.py    # Therapy area lookup
-│   ├── process_medicines_and_get_indications.py
-│   ├── process_medicines_and_new_indications_html.py
-│   ├── process_medicines_and_removed_indications_html.py
-│   ├── query_model_for_indication.py
-│   ├── query_model_for_new_indication_html.py
-│   ├── query_model_for_removed_indication_html.py
-│   ├── query_model_for_new_indication_pdf.py
-│   ├── query_model_for_ema_date.py
-│   ├── query_model_for_NICE_similarity.py
+│   ├── config.py                    # HTTP headers, timeouts, OpenAI client
+│   ├── llm.py                       # Single model entry point: retries, size guard
+│   ├── http_utils.py                # Fetching + trimming pages before the LLM sees them
+│   ├── ema_meeting_highlights.py    # Finds the latest CHMP news item and its links
+│   ├── extractors.py                # All six extraction/comparison prompts
+│   ├── batch.py                     # Runs one extractor over a list of URLs
+│   ├── build_dataset.py             # End-to-end assembly of the dataset
+│   ├── scrape_data_fromMH_with_LLM.py  # One record per medicine
+│   ├── scrape_data_fromEPAR.py      # Therapy class / area from the EPAR page
+│   ├── scrape_data_fromNICE.py      # NICE search hit check
+│   ├── scrape_data_fromSHEET.py     # Medicine list lookup
+│   ├── scrape_therapy_area.py       # Therapy area lookup
 │   ├── compare_nice_and_indication.py
-│   ├── extract_text_from_pdf.py
 │   ├── text_fromNICE.py
+│   ├── extract_text_from_pdf.py
 │   └── get_chmp_opinion_date.py
+├── tests/
+│   ├── fetch_fixtures.py            # Re-downloads the saved pages
+│   ├── fixtures/                    # Saved EMA/NICE pages (gzipped)
+│   └── test_*.py                    # Offline regression tests
+├── evaluation/
+│   ├── metrics.py                   # ROUGE + exact match + classification metrics
+│   ├── grounding.py                 # Label-free: is every answer really on the page?
+│   ├── cross_check.py               # Label-free: does it match EMA's own exports?
+│   ├── evaluate.py                  # Scores a run against a gold file
+│   └── gold_template.csv            # Shape of the hand-checked reference file
 ├── data/
 │   ├── medicines_output_medicines_en.xlsx   # EMA medicine list
 │   └── therapy_area.xlsx                    # Therapy area lookup table
 └── results/
-    └── final_EMA_dataset.xlsx              # Output dataset
+    └── final_EMA_dataset.xlsx       # Output dataset
 ```
+
+---
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+cp .env.example .env        # then add your OpenAI key
+```
+
+The pipeline reads `OPENAI_API_KEY` from the environment. In Colab, store it as a
+notebook secret; the setup cell copies it into `os.environ`.
+
+The EMA medicines table is downloaded from
+[EMA's medicine data page](https://www.ema.europa.eu/en/medicines/download-medicine-data)
+(now published as `medicines-output-medicines-report_en.xlsx`). The real header row
+of that export sits on row 9, hence `header=8`.
+
+---
+
+## Checking a run
+
+Three layers, only the last of which needs hand-labelled answers.
+
+**1. Regression tests — no labels.** The pipeline broke because EMA changed their
+markup, not because the model got worse. Saved pages in `tests/fixtures/` pin the
+structure the scrapers depend on, so a redesign fails a test instead of producing
+an empty file.
+
+```bash
+pytest tests/                       # 23 tests, offline, ~2s
+python tests/fetch_fixtures.py      # refresh the saved pages
+```
+
+**2. Grounding and cross-checks — no labels.** Every indication field is an
+*extraction*, so the answer is already on the page and can be verified without a
+reference dataset.
+
+```bash
+python evaluation/cross_check.py results/final_EMA_dataset.xlsx
+```
+
+`cross_check.py` compares the dataset against EMA's own published exports — the
+post-authorisation table validates which medicines had an extension and on what
+date, and the medicines table validates the Commission decision dates.
+`evaluation/grounding.py` checks that every extracted phrase actually appears in
+the source page, and scores the bold/strikethrough fields against the markup
+pulled straight out of the HTML.
+
+**3. Scored against a gold file — needs labels.** Once layers 1 and 2 have run,
+only a handful of rows per meeting need a human look. The model is asked for three
+different kinds of answer, so three different metrics apply:
+
+| Output | Task | Metric |
+|---|---|---|
+| The four indication fields | Copy wording verbatim off the page | **Exact match** after normalisation, with ROUGE-1/2/L and token precision/recall alongside |
+| `EMA date for extension` | Read one date | **Exact match**, format-tolerant |
+| The three similarity fields | Yes/no judgement | **Accuracy, precision, recall, F1, Cohen's kappa** |
+
+ROUGE alone is not sufficient for the indication fields: an answer that flips a
+negation ("is **not** indicated ... HER2-**negative**") still scores ROUGE-L ≈ 0.91
+against the correct text. Exact match is the headline number, ROUGE says how near
+the misses were, and precision/recall separate invented text from dropped text.
+
+`Search Result in NICE` is not scored here — no model is involved, and it is
+covered by the tests in layer 1.
+
+Copy `evaluation/gold_template.csv`, fill it in by hand for a sample of medicines,
+then:
+
+```bash
+python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold.csv
+```
+
+---
+
 
 ---
 
@@ -137,6 +220,8 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 
 ## AI Utilization
 
-- **Model**: GPT-4o mini — chosen for speed efficiency over Llama 3.1.
+- **Model**: GPT-4o mini — chosen for speed efficiency over Llama 3.1. Pages are
+  trimmed to the relevant section before being sent, so a request stays well inside
+  the context window (an untrimmed Keytruda EPAR page is ~200k tokens).
 - **Tasks**: Extracts structured data from unstructured sources — HTML (bold/strikethrough text), PDFs (procedure steps), and NICE web pages (indication similarity scoring).
 - **Output**: Structured Excel/CSV file with 26 features per medicine for downstream analysis.
