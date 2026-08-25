@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+
+# Scratch output; the published dataset lives in results/
+/EMA_data.csv
+evaluation/gold.csv
+
+# Cached EMA exports downloaded by the cross-check
+medicines-output-*.xlsx
