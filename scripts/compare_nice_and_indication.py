@@ -1,35 +1,37 @@
-from query_model_for_NICE_similarity import query_model_for_NICE_similarity
+"""Ask the model whether each NICE page matches the EMA indication."""
+
+import pandas as pd
+
+from extractors import query_model_for_NICE_similarity
 
 
 def compare_nice_and_indication(nice_text_dict, indication_df):
-    similarity_results = []  # List to store the results
+    """`indication_df` has two columns: the indication text and 'NICE_url'."""
+    indication_column = [c for c in indication_df.columns if c != 'NICE_url'][0]
+    similarity_results = []
 
-    # Iterate over the NICE URLs and corresponding indications
     for url, nice_text in nice_text_dict.items():
         try:
-            # Fetch the corresponding indications from the DataFrame
-            if url in indication_df['NICE_url'].values:
-                indication = indication_df.loc[indication_df['NICE_url'] == url].values[0]
+            rows = indication_df.loc[indication_df['NICE_url'] == url, indication_column]
+            if rows.empty:
+                similarity_results.append(
+                    {'NICE_url': url, 'Result': 'No matching indication found in DataFrame'}
+                )
+                continue
 
-                # Query the model for similarity
-                result = query_model_for_NICE_similarity(nice_text, indication)
+            # Take the indication text itself, not the whole row: passing the
+            # row handed the model a numpy array repr instead of the wording.
+            indication = rows.iloc[0]
+            if pd.isna(indication) or str(indication).strip() in ('', 'N/A'):
+                similarity_results.append({'NICE_url': url, 'Result': 'N/A'})
+                continue
 
-                # Store the result with URL and result
-                similarity_results.append({
-                    'NICE_url': url,
-                    'Result': result
-                })
-            else:
-                similarity_results.append({
-                    'NICE_url': url,
-                    'Result': 'No matching indication found in DataFrame'
-                })
+            similarity_results.append(
+                {'NICE_url': url, 'Result': query_model_for_NICE_similarity(nice_text, str(indication))}
+            )
 
         except Exception as e:
-            print(f"Error processing comparison for {url}: {e}")
-            similarity_results.append({
-                'NICE_url': url,
-                'Result': 'Error'
-            })
+            print(f'Error processing comparison for {url}: {e}')
+            similarity_results.append({'NICE_url': url, 'Result': 'Error'})
 
     return similarity_results

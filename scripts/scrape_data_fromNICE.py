@@ -1,38 +1,30 @@
+"""Whether a medicine appears in NICE search results."""
+
 import re
-import requests
-from bs4 import BeautifulSoup
-from config import headers
+
+from http_utils import fetch_soup
 
 
 def scrape_data_fromNICE(nice_url, product_data):
-    nice_response = requests.get(nice_url, headers=headers)
-    nice_response.encoding = 'utf-8'
-    nice_soup = BeautifulSoup(nice_response.text, 'html.parser')
-
-    # Extract the title of the webpage
     try:
-        title_tag = nice_soup.find('title')
+        title_tag = fetch_soup(nice_url).find('title')
         title_text = title_tag.get_text(strip=True) if title_tag else ''
     except Exception as e:
-        print(f"Error extracting title from NICE page: {nice_url}. Error: {e}")
+        print(f'Error extracting title from NICE page: {nice_url}. Error: {e}')
         product_data['NICE'] = 'N/A'
         return product_data
 
-    # Check if the title indicates no results
-    if "No results" in title_text:
+    # NICE titles read '<query> | Search results | NICE', or
+    # 'No results | Search results | NICE' when nothing matched.
+    if 'No results' in title_text:
         product_data['NICE'] = 'N/A'
     else:
         try:
-            # Extract the medicine name from the title (the part before the first '|')
-            inn_common_name = title_text.split('|')[0].strip()
-
-            # Match the extracted name with the original INN from product_data
-            if re.search(re.escape(product_data['INN']), inn_common_name, re.IGNORECASE):
-                product_data['NICE'] = 'Yes'
-            else:
-                product_data['NICE'] = 'No'
+            searched_name = title_text.split('|')[0].strip()
+            matched = re.search(re.escape(product_data['INN']), searched_name, re.IGNORECASE)
+            product_data['NICE'] = 'Yes' if matched else 'No'
         except Exception as e:
-            print(f"Error processing INN matching for NICE page: {nice_url}. Error: {e}")
+            print(f'Error processing INN matching for NICE page: {nice_url}. Error: {e}')
             product_data['NICE'] = 'N/A'
 
     return product_data

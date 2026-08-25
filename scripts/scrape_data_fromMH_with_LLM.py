@@ -1,143 +1,123 @@
+"""Assemble one record per medicine from a CHMP Meeting Highlights news item."""
+
 import re
-import requests
-from bs4 import BeautifulSoup
-from config import headers
+
+from ema_meeting_highlights import find_section_heading, section_kind, absolute, BASE_URL
+from extract_text_from_pdf import extract_text_from_pdf
+from extractors import query_model_for_ema_date, query_model_for_new_indication_pdf
 from scrape_data_fromEPAR import scrape_data_fromEPAR
 from scrape_data_fromNICE import scrape_data_fromNICE
 from scrape_data_fromSHEET import scrape_data_fromSHEET
-from extract_text_from_pdf import extract_text_from_pdf
-from query_model_for_ema_date import query_model_for_ema_date
-from query_model_for_new_indication_pdf import query_model_for_new_indication_pdf
+
+_INN_LABEL = re.compile(r'International non-proprietary name \(INN\)|^INN$')
+_COMMON_NAME_LABEL = re.compile(r'Common name')
+_APPLICANT_LABEL = re.compile(r'Marketing[- ]authorisation applicant', re.IGNORECASE)
+_HOLDER_LABEL = re.compile(r'Marketing[- ]authorisation holder', re.IGNORECASE)
 
 
-def scrape_data_fromMH_with_LLM(newspage_url, pdf_paths, therapy_area_df, df, indications,
-                                  variation_urls, new_indications_html, removed_indications_html):
-    news_response = requests.get(newspage_url, headers=headers)
-    news_response.encoding = 'utf-8'
-    news_soup = BeautifulSoup(news_response.text, 'html.parser')
+def _definition(item, label_pattern):
+    """Value of a <dt>/<dd> pair whose label matches `label_pattern`."""
+    tag = item.find('dt', string=label_pattern)
+    return tag.find_next('dd').get_text(strip=True) if tag else None
 
-    items = news_soup.find_all('div', class_='item')
+
+def scrape_data_fromMH_with_LLM(mh, pdf_paths, therapy_area_df, df, indications,
+                                new_indications_html, removed_indications_html):
+    """Build the per-medicine records for one Meeting Highlights page.
+
+    `mh` is the dict returned by collect_latest_meeting_highlights(); the other
+    arguments are the lookup tables and the pre-computed LLM extractions.
+    """
     product_data_list = []
-    current_recommendation = None
+    initial_approval = None
 
-    for item in items:
+    for item in mh['soup'].find_all('div', class_='item'):
         try:
-            heading_tag = item.find('h2', class_='mb-4 rounded-title')
-            if heading_tag:
-                heading_text = heading_tag.get_text(strip=True).lower()
-                if 'positive recommendations on new medicines' in heading_text:
-                    current_recommendation = 'Positive'
-                    initial_approval = 'Initial approval'
-                elif 'positive recommendations on new therapeutic indications' in heading_text:
-                    current_recommendation = 'Positive'
-                    initial_approval = 'Extension'
-                elif 'positive recommendations on extensions of indications' in heading_text:
-                    current_recommendation = 'Positive'
-                    initial_approval = 'Extension'
-                elif 'positive recommendations on extensions of therapeutic indications' in heading_text:
-                    current_recommendation = 'Positive'
-                    initial_approval = 'Extension'
-                else:
-                    current_recommendation = None
+            heading = find_section_heading(item)
+            if heading:
+                initial_approval = section_kind(heading.get_text(strip=True))
                 continue
 
-            if current_recommendation != 'Positive':
+            # Outside a positively-recommended section (negative opinions,
+            # withdrawals, generics, biosimilars, statistics).
+            if initial_approval is None:
                 continue
 
             product_name_tag = item.find('h3', class_='mb-4')
-            if product_name_tag:
-                product_name = product_name_tag.get_text(strip=True).lower().replace(' ', '-')
-            else:
-                product_name = 'N/A'
+            if not product_name_tag:
+                continue
+            product_name = product_name_tag.get_text(strip=True).lower().replace(' ', '-')
 
-            epar_url = f"https://www.ema.europa.eu/en/medicines/human/EPAR/{product_name}"
+            epar_url = f'{BASE_URL}/en/medicines/human/EPAR/{product_name}'
 
-            matching_variation_urls = [url for url in variation_urls if url.split('/')[-1].startswith(product_name)]
-            if not matching_variation_urls:
-                matching_variation_urls = [f"https://www.ema.europa.eu/en/medicines/human/variation/{product_name}"]
+            variation_urls = [
+                absolute(a['href']) for a in item.find_all('a', href=True)
+                if '/en/medicines/human/variation/' in a['href']
+            ]
+            if not variation_urls:
+                variation_urls = [f'{BASE_URL}/en/medicines/human/variation/{product_name}']
 
             product_data = {
                 'Product Name': product_name,
-                'Recommendation': current_recommendation,
+                'Recommendation': 'Positive',
                 'Initial Approval': initial_approval,
                 'Date for extension': 'N/A',
-                'Full indication': 'N/A',
-                'New indication HTML': 'N/A',
-                'Removed indication HTML': 'N/A',
+                'Full indication': indications.get(epar_url, 'N/A'),
+                'New indication PDF': 'N/A',
                 'epar_url': epar_url,
-                'variation_url': matching_variation_urls
+                'variation_url': variation_urls,
             }
+
+            product_data['New indication HTML'] = ', '.join(
+                new_indications_html.get(url, 'N/A') for url in variation_urls
+            )
+            product_data['Removed indication HTML'] = ', '.join(
+                removed_indications_html.get(url, 'N/A') for url in variation_urls
+            )
 
             try:
                 product_data = scrape_data_fromEPAR(epar_url, product_data, therapy_area_df, df)
             except Exception as e:
-                print(f"Error scraping data from EPAR for {product_name}: {e}")
+                print(f'Error scraping data from EPAR for {product_name}: {e}')
 
-            product_data['Full indication'] = indications.get(epar_url, 'N/A')
-
-            product_data['New indication HTML'] = ', '.join(
-                [new_indications_html.get(url, 'N/A') for url in matching_variation_urls]
-            )
-            product_data['Removed indication HTML'] = ', '.join(
-                [removed_indications_html.get(url, 'N/A') for url in matching_variation_urls]
-            )
-
-            inn_tag = item.find('dt', string=re.compile(r'International non-proprietary name \(INN\)|INN'))
-            common_name_tag = item.find('dt', string=re.compile(r'Common name'))
-            if inn_tag:
-                product_data['INN'] = inn_tag.find_next('dd').get_text(strip=True)
-                nice_url = f"https://www.nice.org.uk/search?q={product_data['INN']}"
+            inn = _definition(item, _INN_LABEL) or _definition(item, _COMMON_NAME_LABEL)
+            product_data['INN'] = inn or 'N/A'
+            if inn:
+                nice_url = f'https://www.nice.org.uk/search?q={inn}'
+                product_data['NICE_url'] = nice_url
                 try:
                     product_data = scrape_data_fromNICE(nice_url, product_data)
                 except Exception as e:
-                    print(f"Error scraping data from NICE for {product_data['INN']}: {e}")
-            elif common_name_tag:
-                product_data['INN'] = common_name_tag.find_next('dd').get_text(strip=True)
-                nice_url = f"https://www.nice.org.uk/search?q={product_data['INN']}"
-                try:
-                    product_data = scrape_data_fromNICE(nice_url, product_data)
-                except Exception as e:
-                    print(f"Error scraping data from NICE for {product_data['INN']}: {e}")
-            else:
-                product_data['INN'] = 'N/A'
+                    print(f'Error scraping data from NICE for {inn}: {e}')
 
-            applicant_tag = item.find('dt', string=re.compile(r'Marketing[- ]authorisation applicant', re.IGNORECASE))
-            holder_tag = item.find('dt', string=re.compile(r'Marketing[- ]authorisation holder', re.IGNORECASE))
-            if applicant_tag:
-                product_data['Marketing authorisation holder'] = applicant_tag.find_next('dd').get_text(strip=True)
-            elif holder_tag:
-                product_data['Marketing authorisation holder'] = holder_tag.find_next('dd').get_text(strip=True)
-            else:
-                product_data['Marketing authorisation holder'] = 'N/A'
+            product_data['Marketing authorisation holder'] = (
+                _definition(item, _APPLICANT_LABEL)
+                or _definition(item, _HOLDER_LABEL)
+                or 'N/A'
+            )
 
-            dataframe_columns = ['Orphan medicine', 'European Commission decision date']
             try:
-                dataframe_data = scrape_data_fromSHEET(product_name, df, dataframe_columns)
-                if dataframe_data:
-                    product_data.update(dataframe_data)
+                sheet_data = scrape_data_fromSHEET(
+                    product_name, df, ['Orphan medicine', 'European Commission decision date']
+                )
+                if sheet_data:
+                    product_data.update(sheet_data)
             except Exception as e:
-                print(f"Error matching data from sheet for {product_name}: {e}")
+                print(f'Error matching data from sheet for {product_name}: {e}')
 
             matching_pdf = next((pdf for pdf in pdf_paths if product_name in pdf.lower()), None)
-            if matching_pdf:
-                print(f"Processing PDF: {matching_pdf} for product: {product_name}")
+            if matching_pdf and initial_approval == 'Extension':
+                print(f'Processing PDF: {matching_pdf} for product: {product_name}')
                 try:
                     pdf_text = extract_text_from_pdf(matching_pdf)
-                    ema_date = query_model_for_ema_date(pdf_text)
-                    new_indication_pdf = query_model_for_new_indication_pdf(pdf_text)
-
-                    if product_data['Initial Approval'] == 'Extension':
-                        product_data['Date for extension'] = ema_date
-                        product_data['New indication PDF'] = new_indication_pdf
-                    else:
-                        product_data['Date for extension'] = 'N/A'
-                        product_data['New indication PDF'] = 'N/A'
+                    product_data['Date for extension'] = query_model_for_ema_date(pdf_text)
+                    product_data['New indication PDF'] = query_model_for_new_indication_pdf(pdf_text)
                 except Exception as e:
-                    print(f"Error processing PDF {matching_pdf} for {product_name}: {e}")
+                    print(f'Error processing PDF {matching_pdf} for {product_name}: {e}')
 
             product_data_list.append(product_data)
 
         except Exception as e:
-            print(f"Error processing item: {e}")
+            print(f'Error processing item: {e}')
 
     return product_data_list

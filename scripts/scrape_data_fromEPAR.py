@@ -1,45 +1,34 @@
+"""Therapy class, cancer flag and therapy area, from an EPAR page."""
+
 import re
-import requests
-from bs4 import BeautifulSoup
-from config import headers
+
+from http_utils import fetch_soup
 from scrape_data_fromSHEET import scrape_data_fromSHEET
 from scrape_therapy_area import scrape_therapy_area
 
+_ATC_LABEL = re.compile(r'Anatomical therapeutic chemical \(ATC\) code')
+_GROUP_COLUMN = 'Pharmacotherapeutic group\n(human)'
+
 
 def scrape_data_fromEPAR(epar_url, product_data, therapy_area_df, df):
-    try:
-        epar_response = requests.get(epar_url, headers=headers)
-        epar_response.encoding = 'utf-8'
-        epar_soup = BeautifulSoup(epar_response.text, 'html.parser')
-    except Exception as e:
-        print(f"Error fetching or processing the EPAR page: {epar_url}. Error: {e}")
-        product_data['Therapy class'] = 'N/A'
-        product_data['Cancer'] = 'No'
-        product_data['Therapy Area'] = 'N/A'
-        return product_data
-
     therapy_class = 'N/A'
     try:
-        atc_code_tag = epar_soup.find('dt', string=re.compile(r'Anatomical therapeutic chemical \(ATC\) code'))
+        epar_soup = fetch_soup(epar_url)
+        atc_code_tag = epar_soup.find('dt', string=_ATC_LABEL)
         if atc_code_tag:
-            atc_code = atc_code_tag.find_next('dd').get_text(strip=True)
-            therapy_class = atc_code[:3]
-            product_data['Therapy class'] = therapy_class
+            # ATC codes are hierarchical; the first three characters are the
+            # therapeutic subgroup used for the therapy-area lookup.
+            therapy_class = atc_code_tag.find_next('dd').get_text(strip=True)[:3]
         else:
-            code_column = ['Pharmacotherapeutic group\n(human)']
-            sheet_data = scrape_data_fromSHEET(product_data['Product Name'], df, code_column)
-            if sheet_data and sheet_data.get('Pharmacotherapeutic group\n(human)'):
-                therapy_class = sheet_data['Pharmacotherapeutic group\n(human)']
-                product_data['Therapy class'] = therapy_class
-            else:
-                product_data['Therapy class'] = 'N/A'
+            # Medicines with only a CHMP opinion have no ATC code on the page yet.
+            sheet_data = scrape_data_fromSHEET(product_data['Product Name'], df, [_GROUP_COLUMN])
+            if sheet_data and sheet_data.get(_GROUP_COLUMN):
+                therapy_class = sheet_data[_GROUP_COLUMN]
     except Exception as e:
-        print(f"Error extracting ATC code or Therapy class for {epar_url}: {e}")
-        product_data['Therapy class'] = 'N/A'
+        print(f'Error extracting ATC code or Therapy class for {epar_url}: {e}')
 
-    product_data['Cancer'] = 'Yes' if therapy_class in ['L01', 'L02'] else 'No'
-
-    therapy_area = scrape_therapy_area(therapy_class, therapy_area_df, 'Therapy Area')
-    product_data['Therapy Area'] = therapy_area if therapy_area else 'N/A'
+    product_data['Therapy class'] = therapy_class
+    product_data['Cancer'] = 'Yes' if therapy_class in ('L01', 'L02') else 'No'
+    product_data['Therapy Area'] = scrape_therapy_area(therapy_class, therapy_area_df, 'Therapy Area') or 'N/A'
 
     return product_data
