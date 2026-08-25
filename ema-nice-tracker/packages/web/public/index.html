@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMA &amp; NICE Tracker</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>EMA &amp; NICE Tracker</h1>
+  <p class="lede">
+    Builds a dataset of every medicine recommended at the most recent CHMP meeting,
+    with indications extracted from EMA and cross-referenced against NICE.
+  </p>
+</header>
+
+<main>
+  <section class="panel" id="setup">
+    <h2>1. Choose what to collect</h2>
+    <div class="options">
+      <label class="option">
+        <input type="checkbox" id="summaries" checked>
+        <span>
+          <strong>Plain-English summary</strong>
+          <small>Adds a “What changed” column. EMA marks indication changes as a
+          character-level diff, so the raw fields read as fragments like “A” or
+          “-based regimen”; this turns them back into a sentence.</small>
+        </span>
+      </label>
+      <label class="option">
+        <input type="checkbox" id="skipNice">
+        <span>
+          <strong>Skip NICE</strong>
+          <small>Faster. Leaves the NICE columns empty.</small>
+        </span>
+      </label>
+      <label class="option">
+        <input type="checkbox" id="skipLlm">
+        <span>
+          <strong>Scrape only, no AI extraction</strong>
+          <small>No API key or credit needed. The indication columns stay empty.</small>
+        </span>
+      </label>
+    </div>
+    <button id="run" class="primary">Build the dataset</button>
+    <p class="hint" id="hint">Takes about a minute. Indication columns need an <code>OPENAI_API_KEY</code>.</p>
+  </section>
+
+  <section class="panel" id="progress" hidden>
+    <h2>2. Progress</h2>
+    <ol class="stages">
+      <li data-stage="crawl"><span class="dot"></span>Crawling EMA and NICE</li>
+      <li data-stage="enrich"><span class="dot"></span>Extracting indications</li>
+      <li data-stage="check"><span class="dot"></span>Checking the result</li>
+    </ol>
+    <pre id="log" aria-live="polite"></pre>
+  </section>
+
+  <section class="panel" id="results" hidden>
+    <h2>3. Result</h2>
+    <p id="summary"></p>
+    <p><a id="download" class="primary button" href="/api/download" download>Download spreadsheet</a></p>
+    <div class="table-scroll"><table id="table"></table></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
