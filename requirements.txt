@@ -1,0 +1,15 @@
+# Scraping and data handling
+requests>=2.32
+beautifulsoup4>=4.13
+pandas>=2.2
+openpyxl>=3.1
+pypdf>=5.0          # replaces PyPDF2, which was retired in 2023
+
+# LLM extraction
+openai>=1.40
+
+# Evaluation
+rouge-score>=0.1.2
+
+# Tests
+pytest>=8.0
