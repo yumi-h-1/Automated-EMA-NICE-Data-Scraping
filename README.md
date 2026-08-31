@@ -121,7 +121,6 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 │   │                                #   and: did retrieval find what EMA marked up?
 │   ├── cross_check.py               # Label-free: does it match EMA's own exports?
 │   ├── evaluate.py                  # Scores a run against a gold file
-│   ├── make_gold.py                 # Starts a gold file from the page markup
 │   ├── gold_template.csv            # Shape of the hand-checked reference file
 │   └── gold_chmp_2026_07.csv        # Gold set for the July 2026 meeting (16 medicines)
 ├── data/
@@ -294,20 +293,19 @@ covered by the tests in layer 1.
 `evaluation/gold_chmp_2026_07.csv` is a gold set for the 20–23 July 2026 meeting:
 all 16 medicines, with `What changed` written for every one and the two diff
 columns taken straight off the markup. `Full Indication`, the similarity
-judgements and the PDF columns are still blank there.
+judgements and the PDF columns are still blank there. It is written from the
+public EMA pages as a worked example — see limitation 1 for why the references
+this was actually evaluated against are not in this repository.
 
 ```bash
 python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chmp_2026_07.csv
 ```
 
-To start one for a different meeting, `evaluation/make_gold.py` writes the rows,
-the product names and the two columns that can be read off the page — EMA's bold
-and strikethrough are the answer, so no annotator is needed for those — and
-leaves the judgement calls empty:
-
-```bash
-python evaluation/make_gold.py -o evaluation/gold.csv
-```
+To start one for a different meeting, copy `evaluation/gold_template.csv` and
+fill it in. Two of its columns need no judgement at all: EMA's bold and
+strikethrough *are* the answer for `New indication HTML` and
+`Removed indication HTML`, so they can be lifted straight off the variation page
+with `grounding.marked_up_fragments`. Everything else is annotation.
 
 The report prints `labelled=` next to `n=` for the extraction columns. A blank
 reference and a blank prediction score 1.0, correctly — "there was nothing to
@@ -322,19 +320,28 @@ read the two numbers together.
 Written after the fact, knowing where this actually falls down. Roughly in the
 order worth fixing.
 
-### 1. One meeting is annotated, which is not yet enough to quote
+### 1. The gold set here is a stand-in, by necessity
 
-`evaluation/gold_chmp_2026_07.csv` covers 16 medicines: `What changed` for all
-of them, and the two diff columns off the markup. That is enough to run layer 3
-end to end, and not enough to put a number on a CV.
+The reference summaries that would turn this from a demonstration into a
+measurement are internal material and cannot be published in a personal
+repository. So this repository does not carry them, and quotes no number derived
+from them.
 
-Three columns in it are still empty, and each for its own reason.
-`Full Indication` is the slow one — Keytruda's indication section runs to
-~39,000 characters and deciding what the answer is *is* the annotation. The
-three similarity columns are yes/no judgements. `New indication PDF` and
-`EMA date for extension` need the procedural steps PDFs from limitation 3.
+`evaluation/gold_chmp_2026_07.csv` is a substitute, written from the public EMA
+pages for the 20–23 July 2026 meeting and checked by hand against each
+medicine's EPAR overview or variation diff, so that anyone who clones this can
+run layer 3 end to end and see what it reports. It covers 16 medicines:
+`What changed` for all of them, and the two diff columns off the markup. Treat
+it as a worked example of the evaluation, not as its result.
 
-**Target ~30–50 annotated medicines, which is two to three consecutive
+Three of its columns are still empty, each for its own reason. `Full Indication`
+is the slow one — Keytruda's indication section runs to ~39,000 characters and
+deciding what the answer is *is* the annotation. The three similarity columns
+are yes/no judgements. `New indication PDF` and `EMA date for extension` need
+the procedural steps PDFs from limitation 3.
+
+If you do want a number out of this repository rather than out of the method,
+**target ~30–50 annotated medicines, which is two to three consecutive
 meetings.** The trap is that rows
 are not the same as `n` per column: a meeting is around 16 medicines, but only
 the extensions have a variation page, so on the fixture meeting the diff columns
