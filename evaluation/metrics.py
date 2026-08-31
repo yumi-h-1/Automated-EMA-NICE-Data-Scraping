@@ -53,7 +53,20 @@ def normalise(text, strip_prefix=True):
 
 
 def is_empty(text):
-    return normalise(text) in EMPTY_ANSWERS
+    """Whether an answer means "nothing found".
+
+    The comparison runs *before* punctuation is stripped. `normalise` turns
+    'N/A' into 'n a', which matches nothing in EMPTY_ANSWERS — so every 'N/A'
+    used to count as a real answer, and `to_label` read its leading 'n' as an
+    explicit "No".
+    """
+    if text is None or (isinstance(text, float) and text != text):
+        return True
+    plain = _WHITESPACE.sub(' ', str(text).strip().lower()).rstrip('.')
+    # The model writes "I don't know."; both apostrophes turn up in practice.
+    plain = plain.replace("'", '').replace('\u2019', '')
+    return (plain in EMPTY_ANSWERS
+            or _ANSWER_PREFIX.sub('', plain).rstrip('.') in EMPTY_ANSWERS)
 
 
 # --- 1. verbatim span extraction --------------------------------------------
@@ -131,8 +144,10 @@ def date_report(predictions, references):
 
 def to_label(value):
     """Map a free-text yes/no answer onto True/False, or None if unusable."""
+    if is_empty(value):
+        return None
     text = normalise(value, strip_prefix=False)
-    if not text or text in EMPTY_ANSWERS:
+    if not text:
         return None
     first = text.split()[0]
     if first in ('yes', 'y', 'true', '1'):
