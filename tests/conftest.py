@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
+sys.path.insert(0, str(ROOT / 'evaluation'))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from fetch_fixtures import FIXTURES, load  # noqa: E402

@@ -4,11 +4,13 @@
 ![OpenAI](https://img.shields.io/badge/GPT--4o_mini-412991?style=flat&logo=openai&logoColor=white)
 ![Pandas](https://img.shields.io/badge/Pandas-150458?style=flat&logo=pandas&logoColor=white)
 ![BeautifulSoup](https://img.shields.io/badge/BeautifulSoup4-43B02A?style=flat&logo=python&logoColor=white)
+![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat&logo=langchain&logoColor=white)
+![Chroma](https://img.shields.io/badge/Chroma-FF6F61?style=flat&logo=databricks&logoColor=white)
 ![pypdf](https://img.shields.io/badge/pypdf-FF0000?style=flat&logo=adobeacrobatreader&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-F37626?style=flat&logo=jupyter&logoColor=white)
 ![Google Colab](https://img.shields.io/badge/Google_Colab-F9AB00?style=flat&logo=googlecolab&logoColor=white)
 
-Automated pipeline for building a structured regulatory and HTA (Health Technology Assessment) database on medicines, by combining web scraping and LLM-based extraction from [EMA](https://www.ema.europa.eu) and [NICE](https://www.nice.org.uk).
+Automated pipeline for building a structured regulatory and HTA (Health Technology Assessment) database on medicines, by combining web scraping, LLM-based extraction and retrieval-grounded summarisation from [EMA](https://www.ema.europa.eu) and [NICE](https://www.nice.org.uk).
 
 ---
 
@@ -29,10 +31,12 @@ flowchart LR
         B1["Web Scraping\nBeautifulSoup"]
         B2["PDF Extraction\npypdf"]
         B3["LLM Extraction\nGPT-4o mini"]
+        B4["Chunk + Embed\nLangChain / Chroma"]
+        B5["Retrieval-grounded\nSummary\nGPT-4o mini"]
     end
 
     subgraph out["Output"]
-        C1["final_EMA_dataset\n26 features / medicine"]
+        C1["final_EMA_dataset\n26 features / medicine\n+ 2 summary columns"]
     end
 
     A1 & A2 & A3 & A5 --> B1
@@ -41,13 +45,16 @@ flowchart LR
     B1 --> B3
     B2 --> B3
     B3 --> C1
+    B1 --> B4
+    B4 --> B5
+    B5 --> C1
 ```
 
 ---
 
 ## Output Dataset
 
-Each row represents one medicine from the latest CHMP Meeting Highlights. 26 features are collected per medicine across four categories.
+Each row represents one medicine from the latest CHMP Meeting Highlights. 26 features are collected per medicine across four categories, plus two more when the summary step has run.
 
 ### Identification
 
@@ -72,6 +79,13 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 | `Therapy Area` | Mapped therapy area | Therapy area lookup table |
 | `Cancer` | Whether oncology drug (L01/L02) | Derived from therapy class |
 | `Orphan` | Orphan medicine designation | EMA medicine list |
+
+### Summary (optional — added by `summarise.add_summaries`)
+
+| Feature | Description | Source |
+|---|---|---|
+| `What changed` | One or two plain sentences on what this meeting changed, with `[S#]` citations | Passages retrieved from the EPAR, variation and NICE pages |
+| `Summary sources` | Which documents the retriever supplied for that summary | Retrieval metadata |
 
 ### Regulatory Dates
 
@@ -100,11 +114,14 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 
 ```
 ├── notebooks/
-│   └── EMA_data_scraping.ipynb      # Main notebook (Colab or local Jupyter)
+│   ├── EMA_data_scraping.ipynb      # Main notebook (Colab or local Jupyter)
+│   └── (Llama3_1)Experiment_...ipynb  # First RAG attempt: Ollama/HF + LangChain + Chroma
 ├── scripts/
 │   ├── config.py                    # HTTP headers, timeouts, OpenAI client
 │   ├── llm.py                       # Single model entry point: retries, size guard
 │   ├── http_utils.py                # Fetching + trimming pages before the LLM sees them
+│   ├── rag.py                       # Chunking, embedding and per-medicine retrieval
+│   ├── summarise.py                 # The retrieval-grounded "What changed" summary
 │   ├── ema_meeting_highlights.py    # Finds the latest CHMP news item and its links
 │   ├── extractors.py                # All six extraction/comparison prompts
 │   ├── batch.py                     # Runs one extractor over a list of URLs
@@ -123,8 +140,9 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 │   ├── fixtures/                    # Saved EMA/NICE pages (gzipped)
 │   └── test_*.py                    # Offline regression tests
 ├── evaluation/
-│   ├── metrics.py                   # ROUGE + exact match + classification metrics
+│   ├── metrics.py                   # ROUGE + exact match + classification + summary metrics
 │   ├── grounding.py                 # Label-free: is every answer really on the page?
+│   │                                #   and: did retrieval find what EMA marked up?
 │   ├── cross_check.py               # Label-free: does it match EMA's own exports?
 │   ├── evaluate.py                  # Scores a run against a gold file
 │   └── gold_template.csv            # Shape of the hand-checked reference file
@@ -147,10 +165,78 @@ cp .env.example .env        # then add your OpenAI key
 The pipeline reads `OPENAI_API_KEY` from the environment. In Colab, store it as a
 notebook secret; the setup cell copies it into `os.environ`.
 
+`requirements.txt` includes the four retrieval packages
+(`langchain-text-splitters`, `langchain-openai`, `langchain-chroma`, `chromadb`).
+They are only used by the summary step — skip them and everything else still
+imports and runs, and the retrieval tests skip themselves.
+
 The EMA medicines table is downloaded from
 [EMA's medicine data page](https://www.ema.europa.eu/en/medicines/download-medicine-data)
 (now published as `medicines-output-medicines-report_en.xlsx`). The real header row
 of that export sits on row 9, hence `header=8`.
+
+---
+
+## Retrieval, and why only the summary needs it
+
+Every indication column is an **extraction**: the answer is already on the page,
+word for word, and the prompt only has to copy it. `http_utils` narrows the page
+to the relevant section and the whole thing goes into the prompt. There is
+nothing to search for, so those columns use no retrieval at all.
+
+`What changed` is the exception. It has to read across a whole EPAR, the
+variation diff and the NICE result and say in a sentence what a meeting
+changed — and that does not fit. An untrimmed Keytruda EPAR page is ~200k
+tokens, so the size guard in `llm.truncate` starts cutting, and whatever it cuts
+is silently gone. That one step retrieves instead:
+
+```
+EMA + NICE pages ─▶ to_markers ─▶ RecursiveCharacterTextSplitter ─▶ OpenAIEmbeddings
+                                       1200 / 200                 text-embedding-3-small
+                                                                         │
+                     numbered, citable context ◀── top-4, filtered ───────┴─▶ Chroma
+                                 │                  by product
+                                 ▼
+                           GPT-4o mini ─▶ `What changed` + `Summary sources`
+```
+
+The first attempt at this is in
+[`notebooks/(Llama3_1)Experiment_Ollama_+_Langchain__etc.ipynb`](notebooks/), on
+Ollama/Llama 3.1 and Hugging Face embeddings. It was abandoned, and the note in
+that notebook says why: *"All text on web pages is extracted as plain text and
+stored as vectors, ignoring bold or strikethrough formatting. This makes it
+difficult to extract new indications from those pages."* The two fixes for that
+are the whole of the current design:
+
+- **The markup is the signal.** EMA marks a newly added indication in bold and a
+  removed one in strikethrough, and a plain-text loader throws that away. Once it
+  is gone, no amount of retrieval can tell an added indication from the paragraph
+  around it. `rag.to_markers` rewrites `<strong>`/`<s>` into literal
+  `[ADDED]`/`[REMOVED]` markers **before** chunking, so the distinction survives
+  embedding, retrieval and the prompt. The markers are chunk separators too, so a
+  boundary lands before a marked-up span rather than inside one.
+- **Retrieval is scoped to one medicine.** Chunks carry the product name in their
+  metadata and every search filters on it. Without that filter, medicines
+  recommended at the same meeting share far too much vocabulary — "advanced
+  non-small cell lung cancer" retrieves the wrong drug's indication.
+
+The marked-up fragments are pinned into the prompt regardless of what the search
+returns: they are short, and they are the one thing a summary must not miss. The
+prompt numbers each passage `[S1]`, `[S2]`, … and asks for a citation per
+sentence, which is what makes the citation rate below measurable — an uncited
+sentence is one the model did not get from the sources.
+
+```python
+from build_dataset import build_ema_dataset
+from summarise import add_summaries
+
+pages = {}                       # keeps the markup of every page the run fetched
+df = build_ema_dataset(pdf_paths, therapy_area_df, medicines_df, pages=pages)
+add_summaries(df, pages, nice_text_dict)     # indexes those pages, no refetching
+```
+
+This is the only step that needs the four retrieval packages listed under
+[Setup](#setup). Nothing else in the pipeline imports them.
 
 ---
 
@@ -164,7 +250,7 @@ structure the scrapers depend on, so a redesign fails a test instead of producin
 an empty file.
 
 ```bash
-pytest tests/                       # 23 tests, offline, ~2s
+pytest tests/                       # 76 tests, offline, ~3s
 python tests/fetch_fixtures.py      # refresh the saved pages
 ```
 
@@ -183,20 +269,46 @@ date, and the medicines table validates the Commission decision dates.
 the source page, and scores the bold/strikethrough fields against the markup
 pulled straight out of the HTML.
 
+The summary needs its own version of the same idea, because it is the one output
+allowed to rephrase. `grounding.py` also reports, still with no labels:
+
+```python
+from grounding import check_retrieval, check_summaries, mean_recall
+
+log = {}                                       # add_summaries(..., retrieval_log=log)
+mean_recall(check_retrieval(df, log, pages))   # did the search find what EMA marked up?
+check_summaries(df, log)                       # is each summary built from its passages?
+```
+
+- **Retrieval recall** — of the spans EMA marked up, how many the search
+  surfaced. The bold markup *is* the ground truth for what changed, so this
+  needs no reference dataset.
+- **`supported_fraction`** — how much of the summary's vocabulary appears in the
+  passages it was given. Catches the failure ROUGE cannot see: a fluent sentence
+  about a trial result no source mentioned.
+- **`citation_rate`** — how many sentences cite a passage that was really
+  retrieved. `[S9]` against four passages counts as uncited.
+
 **3. Scored against a gold file — needs labels.** Once layers 1 and 2 have run,
-only a handful of rows per meeting need a human look. The model is asked for three
-different kinds of answer, so three different metrics apply:
+only a handful of rows per meeting need a human look. The model is asked for four
+different kinds of answer, so four different metrics apply:
 
 | Output | Task | Metric |
 |---|---|---|
 | The four indication fields | Copy wording verbatim off the page | **Exact match** after normalisation, with ROUGE-1/2/L and token precision/recall alongside |
 | `EMA date for extension` | Read one date | **Exact match**, format-tolerant |
 | The three similarity fields | Yes/no judgement | **Accuracy, precision, recall, F1, Cohen's kappa** |
+| `What changed` | Write a summary | **ROUGE-1/2/L** against a reference summary written by a health economist, reported next to the two label-free numbers from layer 2 |
 
 ROUGE alone is not sufficient for the indication fields: an answer that flips a
 negation ("is **not** indicated ... HER2-**negative**") still scores ROUGE-L ≈ 0.91
 against the correct text. Exact match is the headline number, ROUGE says how near
 the misses were, and precision/recall separate invented text from dropped text.
+
+The summary is the only output with no single correct wording, which is what
+ROUGE is actually for — and the only one that can invent something, which is why
+it is never scored on ROUGE alone. The reference summaries go in the same gold
+file, in a `What changed` column.
 
 `Search Result in NICE` is not scored here — no model is involved, and it is
 covered by the tests in layer 1.
@@ -223,5 +335,16 @@ python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold.csv
 - **Model**: GPT-4o mini — chosen for speed efficiency over Llama 3.1. Pages are
   trimmed to the relevant section before being sent, so a request stays well inside
   the context window (an untrimmed Keytruda EPAR page is ~200k tokens).
-- **Tasks**: Extracts structured data from unstructured sources — HTML (bold/strikethrough text), PDFs (procedure steps), and NICE web pages (indication similarity scoring).
-- **Output**: Structured Excel/CSV file with 26 features per medicine for downstream analysis.
+- **Embeddings**: `text-embedding-3-small`, over EMA and NICE pages chunked with
+  LangChain and indexed in Chroma.
+- **Tasks**:
+  - *Extraction* — structured data out of unstructured sources: HTML
+    (bold/strikethrough text), PDFs (procedure steps), and NICE web pages
+    (indication similarity scoring). No retrieval; the answer is on the page.
+  - *Summarisation* — one plain-English sentence per medicine on what the meeting
+    changed, written only from retrieved passages and cited back to them.
+- **Evaluation**: exact match for the extractions, ROUGE-1/2/L for the summaries
+  against reference summaries, and three label-free checks — grounding, retrieval
+  recall against EMA's own markup, and the summary's supported fraction.
+- **Output**: Structured Excel/CSV file with 26 features per medicine (28 with the
+  summary columns) for downstream analysis.

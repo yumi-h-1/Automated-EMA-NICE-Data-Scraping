@@ -3,7 +3,9 @@
     python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold.csv
 
 Both files are keyed on 'Product Name'. Only the rows present in the gold file
-are scored, so you can annotate a sample rather than every medicine.
+are scored, so you can annotate a sample rather than every medicine, and only
+the columns the gold file actually has are reported — a gold file with just
+'What changed' filled in scores only the summaries.
 """
 
 import argparse
@@ -13,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from metrics import binary_report, date_report, span_report
+from metrics import binary_report, date_report, span_report, summary_report
 
 # Which metric applies to which column.
 SPAN_FIELDS = [
@@ -29,6 +31,7 @@ BINARY_FIELDS = [
     'New Indication HTML Similarity',
     'New Indication PDF Similarity',
 ]
+SUMMARY_FIELDS = ['What changed']
 
 KEY = 'Product Name'
 
@@ -77,6 +80,17 @@ def main():
     for field in BINARY_FIELDS:
         if field in ref.columns and field in pred.columns:
             print(format_report(field, binary_report(pred[field], ref[field])))
+
+    scored_summaries = [f for f in SUMMARY_FIELDS
+                        if f in ref.columns and f in pred.columns]
+    if scored_summaries:
+        print('\nSummaries — ROUGE against the reference summary')
+        for field in scored_summaries:
+            print(format_report(field, summary_report(pred[field], ref[field])))
+        print('  ROUGE says how close the wording is, not whether the summary is true —')
+        print('  a flipped negation still scores near 1.0. Read the low scorers by hand,')
+        print('  and see evaluation/grounding.py for the faithfulness checks that need')
+        print('  no labels at all.')
 
 
 if __name__ == '__main__':

@@ -14,6 +14,13 @@ three different kinds of metric:
   3. A yes/no judgement (the NICE similarity fields, 'Search Result in NICE').
      This is binary classification: accuracy, precision, recall, F1 and Cohen's
      kappa, since class balance is usually skewed.
+  4. A summary ('What changed'). This is the only output with no single correct
+     wording, which is what ROUGE is actually for — n-gram overlap against a
+     reference summary written by a health economist. It is also the only output
+     that can invent something, so it is never scored on ROUGE alone: two
+     label-free numbers go with it, `supported_fraction` (how much of the
+     summary appears in the passages it was given) and `citation_rate` (how many
+     sentences cite a passage that was really retrieved).
 """
 
 import re
@@ -31,7 +38,8 @@ _NON_ALNUM = re.compile(r'[^a-z0-9 ]+')
 _WHITESPACE = re.compile(r'\s+')
 
 # Answers that mean "the model found nothing".
-EMPTY_ANSWERS = {'', 'nan', 'n/a', 'na', 'none', 'i dont know',
+# 'not stated' is what the summariser writes when the sources support nothing.
+EMPTY_ANSWERS = {'', 'nan', 'n/a', 'na', 'none', 'i dont know', 'not stated',
                  'error', 'error fetching or processing the page'}
 
 _DATE_FORMATS = ('%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d', '%d %B %Y', '%d %b %Y')
@@ -184,3 +192,139 @@ def binary_report(predictions, references):
 
     return {'n': n, 'accuracy': accuracy, 'precision': precision, 'recall': recall,
             'f1': f1, 'kappa': kappa, 'unparseable_rate': unusable / n}
+
+
+# --- 4. summaries ------------------------------------------------------------
+
+# Words every sentence carries, which would inflate any overlap measure.
+STOPWORDS = {
+    'a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'by', 'for', 'from',
+    'has', 'have', 'in', 'is', 'it', 'its', 'of', 'on', 'or', 'that', 'the',
+    'this', 'to', 'was', 'were', 'which', 'who', 'with',
+}
+
+_CITATION = re.compile(r'\[S(\d+)\]')
+_SENTENCE_END = re.compile(r'(?<=[.!?])\s+')
+_LEADING_CITATIONS = re.compile(r'^(?:\[S\d+\][,;\s]*)+')
+
+
+def content_words(text):
+    """The words of `text` that carry meaning."""
+    return [word for word in normalise(text, strip_prefix=False).split()
+            if word not in STOPWORDS]
+
+
+def sentences(text):
+    """Split into sentences, keeping each citation with the sentence it supports.
+
+    The prompt asks for a citation at the end of a sentence, and the model
+    writes it after the full stop about as often as before it. Splitting on the
+    stop alone therefore hands '[S1]' to the *next* sentence, marking the cited
+    one uncited and the following one cited — every summary scoring exactly one
+    sentence out.
+    """
+    parts = [part for part in _SENTENCE_END.split(str(text or '')) if part.strip()]
+    result = []
+    for part in parts:
+        leading = _LEADING_CITATIONS.match(part)
+        if leading and result:
+            result[-1] += ' ' + leading.group(0).strip()
+            part = part[leading.end():].strip()
+            if not part:
+                continue
+        result.append(part)
+    return result
+
+
+def rouge_scores(prediction, reference):
+    """ROUGE-1/2/L F-measures for one summary against its reference.
+
+    Citations are stripped first. `normalise` would turn '[S1]' into the token
+    's1', which the reference summaries never contain, so leaving them in would
+    penalise a summary for doing exactly what the prompt asked.
+    """
+    prediction = _CITATION.sub('', str(prediction or ''))
+    pred, ref = normalise(prediction, strip_prefix=False), normalise(reference, strip_prefix=False)
+    if not pred or not ref:
+        return {'rouge1_f': 0.0, 'rouge2_f': 0.0, 'rougeL_f': 0.0}
+
+    rouge = _SCORER.score(ref, pred)
+    return {
+        'rouge1_f': rouge['rouge1'].fmeasure,
+        'rouge2_f': rouge['rouge2'].fmeasure,
+        'rougeL_f': rouge['rougeL'].fmeasure,
+    }
+
+
+def supported_fraction(summary, context):
+    """Fraction of the summary's content words that appear in its sources.
+
+    Unlike the grounding check on the extraction fields this ignores word order:
+    a summary is meant to rephrase, so only the vocabulary can be expected to
+    survive. 1.0 means every meaningful word came from a retrieved passage.
+    """
+    words = content_words(_CITATION.sub('', str(summary or '')))
+    if not words:
+        return 1.0
+    available = set(content_words(context))
+    if not available:
+        return 0.0
+    return sum(1 for word in words if word in available) / len(words)
+
+
+def citation_rate(summary, chunk_count):
+    """Fraction of sentences citing a passage that was actually retrieved.
+
+    '[S9]' against four retrieved passages does not count: the model invented
+    the reference along with whatever it was supporting.
+    """
+    found = sentences(str(summary or '').strip())
+    if not found:
+        return 0.0
+
+    cited = 0
+    for sentence in found:
+        numbers = [int(n) for n in _CITATION.findall(sentence)]
+        if numbers and all(1 <= n <= chunk_count for n in numbers):
+            cited += 1
+    return cited / len(found)
+
+
+def summary_scores(prediction, reference=None, context=None, chunk_count=0):
+    """Every metric that applies to one summary."""
+    scores = {}
+    if reference is not None and not is_empty(reference):
+        scores.update(rouge_scores(prediction, reference))
+    if context is not None:
+        scores['supported_fraction'] = supported_fraction(prediction, context)
+    if chunk_count:
+        scores['citation_rate'] = citation_rate(prediction, chunk_count)
+    return scores
+
+
+def summary_report(predictions, references=None, contexts=None, chunk_counts=None):
+    """Mean scores over a run's summaries.
+
+    `references` may be left out entirely, in which case only the label-free
+    numbers are reported — which is the normal case between gold sets.
+    """
+    predictions = list(predictions)
+    references = list(references) if references is not None else [None] * len(predictions)
+    contexts = list(contexts) if contexts is not None else [None] * len(predictions)
+    chunk_counts = list(chunk_counts) if chunk_counts is not None else [0] * len(predictions)
+
+    scored = []
+    for prediction, reference, context, count in zip(
+            predictions, references, contexts, chunk_counts):
+        if is_empty(prediction):
+            continue
+        scored.append(summary_scores(prediction, reference, context, count))
+
+    if not scored:
+        return {'n': 0}
+
+    report = {'n': len(scored)}
+    for key in {key for row in scored for key in row}:
+        values = [row[key] for row in scored if key in row]
+        report[key] = sum(values) / len(values)
+    return report

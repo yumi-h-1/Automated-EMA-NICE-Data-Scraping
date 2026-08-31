@@ -20,15 +20,21 @@ COLUMNS = [
 ]
 
 
-def build_ema_dataset(pdf_paths, therapy_area_df, df):
-    """Scrape the latest Meeting Highlights and return one row per medicine."""
+def build_ema_dataset(pdf_paths, therapy_area_df, df, pages=None):
+    """Scrape the latest Meeting Highlights and return one row per medicine.
+
+    Pass `pages` a dict to keep the trimmed markup of every page the run
+    fetched, keyed by URL. `summarise.add_summaries` indexes those pages rather
+    than downloading them again.
+    """
     mh = collect_latest_meeting_highlights()
     print(f"Meeting Highlights: {mh['title']}")
     print(f"  {len(mh['epar_urls'])} EPAR URLs, {len(mh['variation_urls'])} variation URLs")
 
-    indications = process_medicines_and_get_indications(mh['epar_urls'])
-    new_indications_html = process_medicines_and_new_indications_html(mh['variation_urls'])
-    removed_indications_html = process_medicines_and_removed_indications_html(mh['variation_urls'])
+    indications = process_medicines_and_get_indications(mh['epar_urls'], pages)
+    new_indications_html = process_medicines_and_new_indications_html(mh['variation_urls'], pages)
+    removed_indications_html = process_medicines_and_removed_indications_html(
+        mh['variation_urls'], pages)
 
     products = scrape_data_fromMH_with_LLM(
         mh, pdf_paths, therapy_area_df, df,

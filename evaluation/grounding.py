@@ -9,6 +9,17 @@ page, word for word. So two things can be verified with no gold set at all —
     added, strikethrough = removed), BeautifulSoup can pull the reference text
     directly, so the model can be scored against it automatically.
 
+The summary column needs its own version of the same idea, because it is the one
+output that is allowed to rephrase:
+
+  * retrieval recall     — of the spans EMA marked up, how many did the search
+    actually surface? The bold markup *is* the ground truth for what changed, so
+    this needs no labels either.
+  * supported fraction   — how much of the summary's vocabulary is in the
+    passages it was given.
+  * citation rate        — how many of its sentences cite a passage that was
+    really retrieved.
+
 Whatever fails these checks is the (short) list worth reading by hand.
 """
 
@@ -21,7 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from http_utils import fetch_soup, page_text  # noqa: E402
-from metrics import is_empty, normalise  # noqa: E402
+from rag import marked_spans, to_markers  # noqa: E402
+
+from metrics import citation_rate, is_empty, normalise, supported_fraction  # noqa: E402
 
 # Bold text EMA puts on every variation page, unrelated to any indication.
 BOILERPLATE = ('First published:', 'This page was last updated on', 'European Medicines Agency')
@@ -158,3 +171,85 @@ def summarise(findings):
         summary.setdefault(key, {})
         summary[key][finding['verdict']] = summary[key].get(finding['verdict'], 0) + 1
     return summary
+
+
+# --- the summary column, still with no labels --------------------------------
+
+def expected_spans(row, pages):
+    """Everything EMA marked up on one medicine's variation pages."""
+    spans = []
+    for url in str(row.get('variation_url', '')).split(','):
+        url = url.strip()
+        if not url or url == 'N/A' or url not in pages:
+            continue
+        document = [{'text': to_markers(pages[url]), 'metadata': {}}]
+        for marker in ('ADDED', 'REMOVED'):
+            for span in marked_spans(document, marker):
+                if span not in spans:
+                    spans.append(span)
+    return spans
+
+
+def check_retrieval(dataset, retrieval_log, pages):
+    """Did the search surface the change EMA marked up?
+
+    One finding per medicine that had a marked-up change; a medicine given a
+    first authorisation has no diff, so there is no recall to measure and it is
+    left out rather than scored 1.0.
+    """
+    findings = []
+
+    for _, row in dataset.iterrows():
+        name = row.get('Product Name', '?')
+        expected = [span for span in expected_spans(row, pages) if normalise(span)]
+        if not expected:
+            continue
+
+        chunks = retrieval_log.get(name, [])
+        retrieved = {normalise(span) for span in
+                     marked_spans(chunks, 'ADDED') + marked_spans(chunks, 'REMOVED')}
+        hits = [span for span in expected if normalise(span) in retrieved]
+
+        findings.append({
+            'Product Name': name,
+            'expected': len(expected),
+            'retrieved': len(hits),
+            'recall': len(hits) / len(expected),
+            'missed': [span for span in expected if span not in hits][:3],
+        })
+
+    return findings
+
+
+def check_summaries(dataset, retrieval_log):
+    """Is each summary actually built out of the passages it was given?"""
+    from rag import format_context
+
+    findings = []
+
+    for _, row in dataset.iterrows():
+        name = row.get('Product Name', '?')
+        summary = row.get('What changed')
+        if is_empty(summary):
+            continue
+
+        chunks = retrieval_log.get(name, [])
+        context = format_context(chunks)
+        score = supported_fraction(summary, context)
+
+        findings.append({
+            'Product Name': name,
+            'verdict': classify(score),
+            'supported_fraction': score,
+            'citation_rate': citation_rate(summary, len(chunks)),
+            'detail': str(summary)[:160],
+        })
+
+    return findings
+
+
+def mean_recall(findings):
+    """Mean retrieval recall over the medicines that had something to find."""
+    if not findings:
+        return None
+    return sum(finding['recall'] for finding in findings) / len(findings)

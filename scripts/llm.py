@@ -15,6 +15,11 @@ COMPARATOR_SYSTEM = (
     'identifying therapeutic indications.'
 )
 
+SUMMARISER_SYSTEM = (
+    'You write short, factual summaries of regulatory decisions for a health '
+    'economics audience. You never state anything the source text does not say.'
+)
+
 
 def truncate(text, limit=MAX_INPUT_CHARS):
     """Clip oversized page text so a request cannot blow the context window."""

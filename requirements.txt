@@ -8,6 +8,14 @@ pypdf>=5.0          # replaces PyPDF2, which was retired in 2023
 # LLM extraction
 openai>=1.40
 
+# Retrieval for the "What changed" summaries. Optional: every other part of the
+# pipeline runs without these, and they are a much heavier install than the rest.
+#   pip install langchain-text-splitters langchain-openai langchain-chroma chromadb
+langchain-text-splitters>=0.3
+langchain-openai>=0.2
+langchain-chroma>=0.1.4
+chromadb>=0.5.5
+
 # Evaluation
 rouge-score>=0.1.2
 
