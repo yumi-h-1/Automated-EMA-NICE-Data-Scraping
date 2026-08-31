@@ -121,7 +121,6 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 │   │                                #   and: did retrieval find what EMA marked up?
 │   ├── cross_check.py               # Label-free: does it match EMA's own exports?
 │   ├── evaluate.py                  # Scores a run against a gold file
-│   ├── make_gold.py                 # Starts a gold file from the page markup
 │   ├── gold_template.csv            # Shape of the hand-checked reference file
 │   └── gold_chmp_2026_07.csv        # Gold set for the July 2026 meeting (16 medicines)
 ├── data/
