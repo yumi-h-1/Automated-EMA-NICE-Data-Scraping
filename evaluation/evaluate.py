@@ -43,10 +43,14 @@ def load(path):
 
 
 def format_report(name, report):
-    if not report or report.get('n', 0) == 0:
+    if not report or report.get('n', 0) == 0 or report.get('labelled') == 0:
         return f'  {name:<34} (no gold labels)'
-    numbers = '  '.join(f'{k}={v:.3f}' for k, v in report.items() if k != 'n')
-    return f'  {name:<34} n={report["n"]:<4} {numbers}'
+    counts = f'n={report["n"]:<4}'
+    if 'labelled' in report:
+        counts += f'labelled={report["labelled"]:<4}'
+    numbers = '  '.join(f'{k}={v:.3f}' for k, v in report.items()
+                        if k not in ('n', 'labelled'))
+    return f'  {name:<34} {counts} {numbers}'
 
 
 def main():

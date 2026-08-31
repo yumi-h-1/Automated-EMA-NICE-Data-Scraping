@@ -107,11 +107,20 @@ def span_scores(prediction, reference):
 
 
 def span_report(predictions, references):
-    """Mean scores over a list of (prediction, reference) pairs."""
+    """Mean scores over a list of (prediction, reference) pairs.
+
+    `labelled` counts the pairs whose reference is not empty. It matters
+    because a blank reference and a blank prediction score 1.0 here — correctly,
+    since "there was nothing to extract" is a real answer the model can get
+    right — but a gold file nobody has filled in is *also* all blanks, and would
+    otherwise report a perfect score off no evidence at all.
+    """
+    references = list(references)
     pairs = [span_scores(p, r) for p, r in zip(predictions, references)]
     if not pairs:
         return {}
-    report = {'n': len(pairs)}
+    report = {'n': len(pairs),
+              'labelled': sum(1 for r in references if not is_empty(r))}
     for key in pairs[0]:
         scored = [p[key] for p in pairs if p[key] is not None]
         if scored:

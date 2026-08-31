@@ -18,36 +18,12 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
 
 ```mermaid
 flowchart LR
-    subgraph src["Data Sources"]
-        A1["EMA Meeting\nHighlights"]
-        A2["EPAR Pages"]
-        A3["Variation Pages"]
-        A4["Procedure\nSteps PDFs"]
-        A5["NICE Search\nPages"]
-        A6["Medicine List\n& Therapy Area\n(Excel)"]
-    end
-
-    subgraph proc["Processing"]
-        B1["Web Scraping\nBeautifulSoup"]
-        B2["PDF Extraction\npypdf"]
-        B3["LLM Extraction\nGPT-4o mini"]
-        B4["Chunk + Embed\nLangChain / Chroma"]
-        B5["Retrieval-grounded\nSummary\nGPT-4o mini"]
-    end
-
-    subgraph out["Output"]
-        C1["final_EMA_dataset\n26 features / medicine\n+ 2 summary columns"]
-    end
-
-    A1 & A2 & A3 & A5 --> B1
-    A4 --> B2
-    A6 --> proc
-    B1 --> B3
-    B2 --> B3
-    B3 --> C1
-    B1 --> B4
-    B4 --> B5
-    B5 --> C1
+    A["EMA & NICE\npages, PDFs"] --> B["Scrape\n+ trim"]
+    B --> C["Extract\nGPT-4o mini"]
+    B --> D["Chunk + embed\nLangChain → Chroma"]
+    D --> E["Summarise\nGPT-4o mini"]
+    C --> F["dataset\n26 columns + 2"]
+    E --> F
 ```
 
 ---
@@ -145,7 +121,9 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 │   │                                #   and: did retrieval find what EMA marked up?
 │   ├── cross_check.py               # Label-free: does it match EMA's own exports?
 │   ├── evaluate.py                  # Scores a run against a gold file
-│   └── gold_template.csv            # Shape of the hand-checked reference file
+│   ├── make_gold.py                 # Starts a gold file from the page markup
+│   ├── gold_template.csv            # Shape of the hand-checked reference file
+│   └── gold_chmp_2026_07.csv        # Gold set for the July 2026 meeting (16 medicines)
 ├── data/
 │   ├── medicines_output_medicines_en.xlsx   # EMA medicine list
 │   └── therapy_area.xlsx                    # Therapy area lookup table
@@ -313,12 +291,29 @@ file, in a `What changed` column.
 `Search Result in NICE` is not scored here — no model is involved, and it is
 covered by the tests in layer 1.
 
-Copy `evaluation/gold_template.csv`, fill it in by hand for a sample of medicines,
-then:
+`evaluation/gold_chmp_2026_07.csv` is a gold set for the 20–23 July 2026 meeting:
+all 16 medicines, with `What changed` written for every one and the two diff
+columns taken straight off the markup. `Full Indication`, the similarity
+judgements and the PDF columns are still blank there.
 
 ```bash
-python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold.csv
+python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chmp_2026_07.csv
 ```
+
+To start one for a different meeting, `evaluation/make_gold.py` writes the rows,
+the product names and the two columns that can be read off the page — EMA's bold
+and strikethrough are the answer, so no annotator is needed for those — and
+leaves the judgement calls empty:
+
+```bash
+python evaluation/make_gold.py -o evaluation/gold.csv
+```
+
+The report prints `labelled=` next to `n=` for the extraction columns. A blank
+reference and a blank prediction score 1.0, correctly — "there was nothing to
+extract" is an answer the model can get right — but that also means an
+unannotated column would otherwise report a perfect score off no evidence, so
+read the two numbers together.
 
 ---
 
@@ -327,21 +322,26 @@ python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold.csv
 Written after the fact, knowing where this actually falls down. Roughly in the
 order worth fixing.
 
-### 1. None of the accuracy numbers have been measured
+### 1. One meeting is annotated, which is not yet enough to quote
 
-`evaluation/gold_template.csv` is a template — no gold file has been filled in.
-Everything in layer 3 is therefore a capability rather than a result: the
-pipeline can report exact match and ROUGE, but it has never been run against
-hand-written references. Only the label-free checks in layers 1 and 2 have
-actually been run over a real meeting.
+`evaluation/gold_chmp_2026_07.csv` covers 16 medicines: `What changed` for all
+of them, and the two diff columns off the markup. That is enough to run layer 3
+end to end, and not enough to put a number on a CV.
 
-This is the highest-value piece of work left. **Target ~30–50 annotated
-medicines, which is two to three consecutive meetings.** The trap is that rows
+Three columns in it are still empty, and each for its own reason.
+`Full Indication` is the slow one — Keytruda's indication section runs to
+~39,000 characters and deciding what the answer is *is* the annotation. The
+three similarity columns are yes/no judgements. `New indication PDF` and
+`EMA date for extension` need the procedural steps PDFs from limitation 3.
+
+**Target ~30–50 annotated medicines, which is two to three consecutive
+meetings.** The trap is that rows
 are not the same as `n` per column: a meeting is around 16 medicines, but only
 the extensions have a variation page, so on the fixture meeting the diff columns
-would get `n=8` out of 16 rows. At an observed 90%, a Wilson 95% interval is
-±0.21 at n=8, ±0.15 at n=16, ±0.11 at n=30 and ±0.09 at n=50 — so one meeting
-tells you whether a column is broken, and three let you quote a figure.
+would get `n=8` out of 16 rows — which is what the committed gold set shows, at
+`labelled=7` and `labelled=3`. At an observed 90%, a Wilson 95% interval is
+±0.21 at n=8, ±0.15 at n=16, ±0.11 at n=30 and ±0.09 at n=50, so one meeting
+tells you whether a column is broken and three let you quote a figure.
 
 Annotate for spread rather than convenience: both first authorisations and
 extensions, oncology and not, NICE hit and NICE miss, and deliberately include
