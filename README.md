@@ -322,6 +322,84 @@ python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold.csv
 
 ---
 
+## Known limitations and future work
+
+Written after the fact, knowing where this actually falls down. Roughly in the
+order worth fixing.
+
+### 1. None of the accuracy numbers have been measured
+
+`evaluation/gold_template.csv` is a template — no gold file has been filled in.
+Everything in layer 3 is therefore a capability rather than a result: the
+pipeline can report exact match and ROUGE, but it has never been run against
+hand-written references. Only the label-free checks in layers 1 and 2 have
+actually been run over a real meeting.
+
+This is the highest-value piece of work left. **Target ~30–50 annotated
+medicines, which is two to three consecutive meetings.** The trap is that rows
+are not the same as `n` per column: a meeting is around 16 medicines, but only
+the extensions have a variation page, so on the fixture meeting the diff columns
+would get `n=8` out of 16 rows. At an observed 90%, a Wilson 95% interval is
+±0.21 at n=8, ±0.15 at n=16, ±0.11 at n=30 and ±0.09 at n=50 — so one meeting
+tells you whether a column is broken, and three let you quote a figure.
+
+Annotate for spread rather than convenience: both first authorisations and
+extensions, oncology and not, NICE hit and NICE miss, and deliberately include
+the medicines whose diff is many small fragments, since those are what the
+summary step exists for.
+
+Separately, any NICE-similarity figure produced before commit `bfdadd4` is wrong.
+`N/A` answers were scored as an explicit "No" instead of being excluded, which
+skews accuracy, precision, recall, F1 and kappa on all three similarity columns.
+Those have to be re-run, not just quoted.
+
+### 2. `supported_fraction` is lexical, not semantic
+
+It measures how much of a summary's vocabulary appears in the retrieved passages.
+That catches an invented trial result, but it is the wrong shape for the job in
+both directions: a correct paraphrase that uses different words scores low, and a
+false claim assembled out of words that *are* in the sources scores high. An
+entailment check (NLI, or a second model asked whether each sentence follows from
+its cited passage) is the version this should have been.
+
+### 3. The automation stops short of the PDFs
+
+`New indication PDF` and `EMA date for extension` come from EMA's *procedural
+steps* PDFs, which have to be downloaded by hand into a folder before a run — EMA
+does not link them anywhere the scraper can follow predictably. Skip that step and
+both columns are `N/A` for every medicine. So the pipeline is automated over the
+EPAR, variation and NICE pages, and not over the PDFs. EMA's document search, or
+the document table on each EPAR page, is where a fix would start.
+
+### 4. The NICE side is shallower than it looks
+
+The similarity columns compare an EMA indication against the NICE **search results
+page**, not against the guidance document. That is why they read as "does a NICE
+result look related", not "NICE has appraised this indication". Following the top
+result into the guidance itself and comparing against that would turn these
+columns from a hint into an answer.
+
+### 5. Retrieval was never tuned
+
+Every retrieval parameter is a first guess carried over from the original
+notebook: chunk size 1200, overlap 200, top-4, one fixed query string.
+`check_retrieval` exists precisely to measure the effect of changing them — recall
+against EMA's own markup, no labels needed — but it has only been exercised
+against a stub embedder, so no real recall figure exists yet. Three specific gaps:
+
+- `add_summaries` does not expose `k`; changing it means editing `rag.TOP_K` or
+  building the `Retriever` yourself.
+- The index is rebuilt in memory on every run. `build_store(persist_dir=...)`
+  supports persistence and nothing uses it.
+- A hybrid search — embeddings plus a keyword match on the `[ADDED]`/`[REMOVED]`
+  markers — is the obvious thing to try next, since those markers are exact
+  strings rather than something the embedding has to approximate.
+
+### 6. One meeting at a time
+
+The pipeline only ever reads the most recent Meeting Highlights. Any trend
+question — how long the EMA-to-NICE lag is, how it varies by therapy area — needs
+a backfill over past meetings, and nothing here does that.
 
 ---
 
