@@ -2,15 +2,16 @@
 
 Every indication column in this pipeline is an *extraction*: the answer is
 already on the page, word for word, and the prompt only has to copy it. Those
-need no retrieval — `http_utils` narrows the page to the relevant section and
-the whole thing goes into the prompt.
+need no retrieval. `http_utils` narrows the page to the relevant section and the
+whole thing goes into the prompt.
 
-The summary column is the exception. It has to read across a whole EPAR, the
-variation diff and the NICE result and say in a sentence what a meeting
-changed, and that does not fit: an untrimmed Keytruda EPAR is ~200k tokens, so
-`llm.truncate` starts cutting and whatever it cuts is silently gone. Retrieval
-replaces that blind truncation with a choice — the model is given the passages
-that answer the question, and the summary cites which ones it used.
+The summary column is the exception, and the only one the model writes rather
+than copies. That is the one place it could state something no source says, so
+retrieval is here for a single purpose: to keep the summary tied to the pages it
+came from. The model is handed numbered passages pulled from those pages and
+nothing else, and the prompt requires a citation per sentence. A sentence with no
+citation is one it did not get from a source, which is what makes an ungrounded
+answer visible instead of plausible.
 
 Two details make this work on regulatory pages. Both come out of the first
 attempt at it, in `notebooks/(Llama3_1)Experiment_Ollama_+_Langchain__etc.ipynb`,
@@ -19,13 +20,13 @@ which was abandoned because it could not read a variation page at all:
   1. **The markup is the signal.** EMA marks a newly added indication in bold
      and a removed one in strikethrough. A plain-text loader throws that away,
      and once it is gone no amount of retrieval can tell an added indication
-     from the paragraph around it — which is exactly what went wrong the first
+     from the paragraph around it, which is exactly what went wrong the first
      time. `to_markers` rewrites <strong> and <s> into literal [ADDED] and
      [REMOVED] markers *before* chunking, so the distinction survives embedding,
      retrieval and the prompt.
   2. **Retrieval is scoped to one medicine.** Chunks carry the product name in
      their metadata and every search filters on it. Without that filter,
-     medicines recommended at the same meeting share far too much vocabulary —
+     medicines recommended at the same meeting share far too much vocabulary, and
      "advanced non-small cell lung cancer" retrieves the wrong drug.
 
 The marked-up fragments are also pinned into the prompt regardless of what the
@@ -43,10 +44,10 @@ import re
 
 from bs4 import BeautifulSoup
 
-# Regulatory indications run long — one sentence naming disease, line of therapy
-# and biomarker is easily 400 characters — so a chunk has to be big enough to
-# hold a whole one, and overlap enough that a bad split leaves both halves
-# intact somewhere.
+# Regulatory indications run long. One sentence naming disease, line of therapy
+# and biomarker is easily 400 characters, so a chunk has to be big enough to hold
+# a whole one, and overlap enough that a bad split leaves both halves intact
+# somewhere.
 CHUNK_SIZE = 1200
 CHUNK_OVERLAP = 200
 
@@ -214,7 +215,7 @@ def build_store(documents, persist_dir=None, embeddings=None, collection='ema-ni
 
 
 # What a summary needs to know, phrased as the sentence we hope to retrieve
-# rather than as keywords — the whole string is what gets embedded.
+# rather than as keywords, because the whole string is what gets embedded.
 SUMMARY_QUERY = (
     'therapeutic indication of the medicine, the patient population, and the '
     'indication that was newly added or removed at this meeting'

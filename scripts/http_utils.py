@@ -1,9 +1,10 @@
 """Fetching and trimming HTML.
 
 EMA pages carry a lot of navigation, scripts and document tables that are
-irrelevant to indication extraction. A Keytruda EPAR page is ~200k tokens when
-sent verbatim, which no longer fits in the model's context window, so pages are
-narrowed to the relevant section before they reach the model.
+irrelevant to indication extraction. A Keytruda EPAR page measures 132,209
+tokens sent verbatim, over the model's 128k context window, so pages are
+narrowed to the relevant section before they reach the model, which brings that
+page down to 16,761 tokens.
 """
 
 import random

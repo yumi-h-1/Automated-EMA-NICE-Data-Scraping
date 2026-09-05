@@ -11,7 +11,7 @@ anchor text is only 'View', so the href is the only thing worth matching on.
 
 Only authorised medicines have one. A medicine that has just received a
 positive opinion has no post-authorisation history yet, so there is nothing to
-download and both columns stay 'N/A' — which is the same condition that already
+download and both columns stay 'N/A'. That is the same condition that already
 decides whether the PDF prompts run at all.
 """
 

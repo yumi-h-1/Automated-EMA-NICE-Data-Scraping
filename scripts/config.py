@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openai import OpenAI
 
-# Load .env from the repository root, whatever the working directory is — the
+# Load .env from the repository root, whatever the working directory is. The
 # notebook runs from notebooks/, the tests from the root, and scripts are called
 # from both. Colab has no .env and supplies the key through os.environ instead,
 # so a missing file is not an error.

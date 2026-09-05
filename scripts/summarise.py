@@ -1,7 +1,7 @@
 """The plain-English summary of what a CHMP meeting changed, grounded in retrieval.
 
 EMA marks an indication change as a character-level diff, so the raw extracted
-fields read as fragments — "A", "-based regimen", "an". They are accurate and
+fields read as fragments like "A", "-based regimen" and "an". They are accurate and
 almost unreadable. This step turns them back into a sentence, using only the
 passages `rag` retrieves for that medicine, and makes the model cite which
 passage each sentence came from.
