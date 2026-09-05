@@ -36,14 +36,14 @@ flowchart LR
     FET --> TRIM["BeautifulSoup\nstrip noise, narrow to\nthe indication section"]
 
     TRIM --> BS["BeautifulSoup reads\nINN, MA holder, ATC,\ndates, NICE hit"]
-    TRIM --> EXT["GPT-4o mini\nindication columns"]
+    TRIM --> EXT["GPT-4o mini extracts\nindication columns"]
     TRIM --> IDX["Chroma DB: Medicine indication from CHMP, \nsearch result from NICE"]
-    PDF --> PEX["pypdf then GPT-4o mini\nPDF columns"]
+    PDF --> PEX["pypdf then GPT-4o mini extracts\nPDF columns"]
 
     IDX --> RET["Retrieve top-4,\nfiltered by product"]
-    RET --> SUM["GPT-4o mini summary\ncited S1..S4"]
+    RET --> SUM["GPT-4o mini summary"]
 
-    BS --> OUT["Excel or CSV file\n25 columns + 2"]
+    BS --> OUT["Excel or CSV file"]
     EXT --> OUT
     PEX --> OUT
     SUM --> OUT
