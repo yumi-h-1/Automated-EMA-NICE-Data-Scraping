@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+.env
+.cache/
+.ema-nice/
+crawl.json
+dataset.xlsx
+dataset.csv
+dataset.json
+
+# Crawlee's local bookkeeping
+storage/

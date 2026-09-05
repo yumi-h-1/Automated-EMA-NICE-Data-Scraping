@@ -1,0 +1,9 @@
+{
+  "name": "@ema-nice/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "ema-nice-tracker": "src/index.js" },
+  "dependencies": {
+    "@ema-nice/crawler": "*"
+  }
+}

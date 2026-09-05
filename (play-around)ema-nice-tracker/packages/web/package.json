@@ -1,0 +1,7 @@
+{
+  "name": "@ema-nice/web",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "server.js",
+  "dependencies": { "@ema-nice/cli": "*" }
+}
