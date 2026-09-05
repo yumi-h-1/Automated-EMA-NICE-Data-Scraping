@@ -22,7 +22,9 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
   and indexed in Chroma. Used by the summary step.
 - **Evaluation**. Three types: exact match for the extractions, binary classification, ROUGE-1/2/L for the
   summaries.
-- **Output**. An Excel/CSV file.
+- **Output**. An Excel file, `results/final_EMA_dataset.xlsx`, with 27 columns per
+  medicine. A CSV is written earlier in the run as a checkpoint, before the NICE
+  similarity and summary steps, so it holds 22 of those columns rather than all of them.
 
 
 ## Pipeline
