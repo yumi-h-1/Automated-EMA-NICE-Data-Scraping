@@ -42,7 +42,7 @@ flowchart LR
 
     IDX --> SUM["GPT-4o mini summary"]
 
-    BS --> OUT["Excel or CSV file"]
+    BS --> OUT["Excel file"]
     EXT --> OUT
     PEX --> OUT
     SUM --> OUT
