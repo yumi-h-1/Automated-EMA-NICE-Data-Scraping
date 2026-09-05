@@ -4,7 +4,7 @@
 
 Both files are keyed on 'Product Name'. Only the rows present in the gold file
 are scored, so you can annotate a sample rather than every medicine, and only
-the columns the gold file actually has are reported — a gold file with just
+the columns the gold file actually has are reported, so a gold file with just
 'What changed' filled in scores only the summaries.
 """
 
@@ -70,17 +70,17 @@ def main():
 
     pred, ref = predictions.loc[shared], gold.loc[shared]
 
-    print('\nVerbatim extraction — exact_match is the headline; ROUGE shows how near the misses were')
+    print('\nVerbatim extraction. exact_match is the headline; ROUGE shows how near the misses were')
     for field in SPAN_FIELDS:
         if field in ref.columns and field in pred.columns:
             print(format_report(field, span_report(pred[field], ref[field])))
 
-    print('\nDates — exact match only')
+    print('\nDates. Exact match only')
     for field in DATE_FIELDS:
         if field in ref.columns and field in pred.columns:
             print(format_report(field, date_report(pred[field], ref[field])))
 
-    print('\nYes/no judgements — classification metrics')
+    print('\nYes/no judgements. Classification metrics')
     for field in BINARY_FIELDS:
         if field in ref.columns and field in pred.columns:
             print(format_report(field, binary_report(pred[field], ref[field])))
@@ -88,10 +88,10 @@ def main():
     scored_summaries = [f for f in SUMMARY_FIELDS
                         if f in ref.columns and f in pred.columns]
     if scored_summaries:
-        print('\nSummaries — ROUGE against the reference summary')
+        print('\nSummaries. ROUGE against the reference summary')
         for field in scored_summaries:
             print(format_report(field, summary_report(pred[field], ref[field])))
-        print('  ROUGE says how close the wording is, not whether the summary is true —')
+        print('  ROUGE says how close the wording is, not whether the summary is true.')
         print('  a flipped negation still scores near 1.0. Read the low scorers by hand,')
         print('  and see evaluation/grounding.py for the faithfulness checks that need')
         print('  no labels at all.')

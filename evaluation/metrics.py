@@ -15,7 +15,7 @@ three different kinds of metric:
      This is binary classification: accuracy, precision, recall, F1 and Cohen's
      kappa, since class balance is usually skewed.
   4. A summary ('What changed'). This is the only output with no single correct
-     wording, which is what ROUGE is actually for — n-gram overlap against a
+     wording, which is what ROUGE is actually for: n-gram overlap against a
      reference summary written by a health economist. It is also the only output
      that can invent something, so it is never scored on ROUGE alone: two
      label-free numbers go with it, `supported_fraction` (how much of the
@@ -47,7 +47,7 @@ _DATE_FORMATS = ('%d/%m/%Y', '%d-%m-%Y', '%Y-%m-%d', '%d %B %Y', '%d %b %Y')
 
 def normalise(text, strip_prefix=True):
     """Lower-case, drop the 'Medicine Name:' prefix, punctuation and extra space."""
-    # Blank cells arrive from pandas as NaN, whose str() is 'nan' — treat those,
+    # Blank cells arrive from pandas as NaN, whose str() is 'nan'. Treat those,
     # and the model's own no-answer replies, as empty.
     if text is None or (isinstance(text, float) and text != text):
         return ''
@@ -64,7 +64,7 @@ def is_empty(text):
     """Whether an answer means "nothing found".
 
     The comparison runs *before* punctuation is stripped. `normalise` turns
-    'N/A' into 'n a', which matches nothing in EMPTY_ANSWERS — so every 'N/A'
+    'N/A' into 'n a', which matches nothing in EMPTY_ANSWERS, so every 'N/A'
     used to count as a real answer, and `to_label` read its leading 'n' as an
     explicit "No".
     """
@@ -110,9 +110,9 @@ def span_report(predictions, references):
     """Mean scores over a list of (prediction, reference) pairs.
 
     `labelled` counts the pairs whose reference is not empty. It matters
-    because a blank reference and a blank prediction score 1.0 here — correctly,
+    because a blank reference and a blank prediction score 1.0 here, correctly,
     since "there was nothing to extract" is a real answer the model can get
-    right — but a gold file nobody has filled in is *also* all blanks, and would
+    right, but a gold file nobody has filled in is *also* all blanks, and would
     otherwise report a perfect score off no evidence at all.
     """
     references = list(references)
@@ -229,7 +229,7 @@ def sentences(text):
     The prompt asks for a citation at the end of a sentence, and the model
     writes it after the full stop about as often as before it. Splitting on the
     stop alone therefore hands '[S1]' to the *next* sentence, marking the cited
-    one uncited and the following one cited — every summary scoring exactly one
+    one uncited and the following one cited, and every summary scoring exactly one
     sentence out.
     """
     parts = [part for part in _SENTENCE_END.split(str(text or '')) if part.strip()]
@@ -315,7 +315,7 @@ def summary_report(predictions, references=None, contexts=None, chunk_counts=Non
     """Mean scores over a run's summaries.
 
     `references` may be left out entirely, in which case only the label-free
-    numbers are reported — which is the normal case between gold sets.
+    numbers are reported, which is the normal case between gold sets.
     """
     predictions = list(predictions)
     references = list(references) if references is not None else [None] * len(predictions)

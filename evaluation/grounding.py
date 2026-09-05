@@ -1,23 +1,23 @@
 """Checks that need no hand-labelled answers.
 
 Every indication field is an *extraction*: the correct answer is already on the
-page, word for word. So two things can be verified with no gold set at all —
+page, word for word. So two things can be verified with no gold set at all:
 
-  * grounding — is every phrase the model returned actually present in the
+  * grounding: is every phrase the model returned actually present in the
     source page? Anything that is not was invented.
-  * coverage  — for the two fields whose source markup is unambiguous (bold =
+  * coverage: for the two fields whose source markup is unambiguous (bold =
     added, strikethrough = removed), BeautifulSoup can pull the reference text
     directly, so the model can be scored against it automatically.
 
 The summary column needs its own version of the same idea, because it is the one
 output that is allowed to rephrase:
 
-  * retrieval recall     — of the spans EMA marked up, how many did the search
+  * retrieval recall: of the spans EMA marked up, how many did the search
     actually surface? The bold markup *is* the ground truth for what changed, so
     this needs no labels either.
-  * supported fraction   — how much of the summary's vocabulary is in the
+  * supported fraction: how much of the summary's vocabulary is in the
     passages it was given.
-  * citation rate        — how many of its sentences cite a passage that was
+  * citation rate: how many of its sentences cite a passage that was
     really retrieved.
 
 Whatever fails these checks is the (short) list worth reading by hand.
@@ -74,7 +74,7 @@ def marked_up_fragments(soup, tag):
 
     These fragments are frequently mid-sentence ('an', '-based regimen'), because
     EMA marks up a character-level diff rather than whole indications. That is
-    exactly why the pipeline asks a model to stitch them together — but the
+    exactly why the pipeline asks a model to stitch them together, but the
     fragments themselves are an exact reference for what it had to work with.
     """
     fragments = []
