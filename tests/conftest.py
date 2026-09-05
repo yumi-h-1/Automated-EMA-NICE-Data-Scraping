@@ -46,7 +46,8 @@ def offline(monkeypatch):
 
     monkeypatch.setattr(http_utils, 'fetch_soup', fake_fetch_soup)
     for module in ('ema_meeting_highlights', 'scrape_data_fromEPAR',
-                   'scrape_data_fromNICE', 'text_fromNICE', 'batch'):
+                   'scrape_data_fromNICE', 'text_fromNICE', 'batch',
+                   'download_procedural_pdf'):
         __import__(module)
         monkeypatch.setattr(sys.modules[module], 'fetch_soup', fake_fetch_soup, raising=False)
     return fake_fetch_soup
