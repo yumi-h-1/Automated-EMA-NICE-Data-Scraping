@@ -7,6 +7,7 @@ pypdf>=5.0          # replaces PyPDF2, which was retired in 2023
 
 # LLM extraction
 openai>=1.40
+python-dotenv>=1.0        # loads .env; the pipeline reads the key from os.environ
 
 # Retrieval for the "What changed" summaries. Optional: every other part of the
 # pipeline runs without these, and they are a much heavier install than the rest.
