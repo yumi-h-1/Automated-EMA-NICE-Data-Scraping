@@ -1,8 +1,20 @@
 """Shared configuration: HTTP headers, request timeouts and the OpenAI client."""
 
 import os
+from pathlib import Path
 
 from openai import OpenAI
+
+# Load .env from the repository root, whatever the working directory is — the
+# notebook runs from notebooks/, the tests from the root, and scripts are called
+# from both. Colab has no .env and supplies the key through os.environ instead,
+# so a missing file is not an error.
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - dependency guard
+    pass
+else:
+    load_dotenv(Path(__file__).resolve().parents[1] / '.env')
 
 # EMA and NICE both serve plain HTML to a normal browser User-Agent.
 headers = {
@@ -41,8 +53,9 @@ def get_client():
         api_key = os.environ.get('OPENAI_API_KEY')
         if not api_key:
             raise RuntimeError(
-                'OPENAI_API_KEY is not set. See .env.example, or in Colab store the '
-                'key as a secret and copy it into os.environ before running.'
+                'OPENAI_API_KEY is not set. Copy .env.example to .env in the project '
+                'root and fill it in, or in Colab store the key as a secret and copy '
+                'it into os.environ before running.'
             )
         _client = OpenAI(api_key=api_key)
     return _client

@@ -7,6 +7,7 @@ keeps the EPAR list, the variation list and the news date consistent.
 import re
 from datetime import datetime
 
+from get_chmp_opinion_date import get_chmp_opinion_date
 from http_utils import fetch_soup
 
 NEWS_URL = 'https://www.ema.europa.eu/en/news?f%5B0%5D=ema_news_responsible_body%3A100002'
@@ -105,10 +106,18 @@ def collect_latest_meeting_highlights():
             if '/en/medicines/human/variation/' in a_tag['href']:
                 variation_urls.append(absolute(a_tag['href']))
 
+    date = published_date(soup)
+    # The title is the primary source for the opinion date. If EMA changes how
+    # the title is worded the regex stops matching, so fall back on the news
+    # date: the meeting ends the day before EMA publishes the highlights.
+    chmp_opinion_date = meeting_end_date(title)
+    if chmp_opinion_date == 'N/A' and date != 'N/A':
+        chmp_opinion_date = get_chmp_opinion_date(date)
+
     return {
         'title': title,
-        'date': published_date(soup),
-        'chmp_opinion_date': meeting_end_date(title),
+        'date': date,
+        'chmp_opinion_date': chmp_opinion_date,
         'url': url,
         'soup': soup,
         'epar_urls': list(dict.fromkeys(epar_urls)),

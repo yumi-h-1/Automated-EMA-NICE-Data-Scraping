@@ -2,6 +2,7 @@
 
 import re
 
+from download_procedural_pdf import download_procedural_pdf
 from ema_meeting_highlights import find_section_heading, section_kind, absolute, BASE_URL
 from extract_text_from_pdf import extract_text_from_pdf
 from extractors import query_model_for_ema_date, query_model_for_new_indication_pdf
@@ -22,11 +23,16 @@ def _definition(item, label_pattern):
 
 
 def scrape_data_fromMH_with_LLM(mh, pdf_paths, therapy_area_df, df, indications,
-                                new_indications_html, removed_indications_html):
+                                new_indications_html, removed_indications_html,
+                                pdf_dir=None):
     """Build the per-medicine records for one Meeting Highlights page.
 
     `mh` is the dict returned by collect_latest_meeting_highlights(); the other
     arguments are the lookup tables and the pre-computed LLM extractions.
+
+    Pass `pdf_dir` to let the run download any procedural steps PDF it is
+    missing into that folder. A PDF already in `pdf_paths` wins, so a file put
+    there by hand is still used as-is.
     """
     product_data_list = []
     initial_approval = None
@@ -106,6 +112,12 @@ def scrape_data_fromMH_with_LLM(mh, pdf_paths, therapy_area_df, df, indications,
                 print(f'Error matching data from sheet for {product_name}: {e}')
 
             matching_pdf = next((pdf for pdf in pdf_paths if product_name in pdf.lower()), None)
+            if matching_pdf is None and pdf_dir and initial_approval == 'Extension':
+                try:
+                    matching_pdf = download_procedural_pdf(epar_url, pdf_dir)
+                except Exception as e:
+                    print(f'Could not download the procedural steps PDF for {product_name}: {e}')
+
             if matching_pdf and initial_approval == 'Extension':
                 print(f'Processing PDF: {matching_pdf} for product: {product_name}')
                 try:
