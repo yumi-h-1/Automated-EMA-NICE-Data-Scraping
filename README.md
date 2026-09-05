@@ -14,6 +14,17 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
 
 ---
 
+## AI Utilization
+
+- **GPT-4o mini** — It does two jobs: extracting structured fields from EMA pages, PDFs and NICE pages, and writing the
+  `What changed` summary.
+- **`text-embedding-3-small`** - This chunks EMA and NICE pages with LangChain
+  and indexed in Chroma. Used by the summary step.
+- **Evaluation** — Three types: exact match for the extractions, binary classification, ROUGE-1/2/L for the
+  summaries.
+- **Output** — An Excel/CSV file.
+
+
 ## Pipeline
 
 ```mermaid
@@ -134,7 +145,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 
 ---
 
-## Running it
+## Set Up
 
 Two ways in, depending on who is running it. Both do the same work in the same
 order, and both write `results/final_EMA_dataset.xlsx`.
@@ -179,13 +190,7 @@ can be run on a schedule and its exit status believed.
 
 ### Dependencies
 
-`OPENAI_API_KEY` is required — the extraction, comparison and summary columns
-are all model calls. Without it only the scraped columns fill in.
-
-Everything except the retrieval packages is small. `chromadb` and the three
-`langchain-*` packages are needed **only** by the summary step, and they are by
-far the heaviest part of the install. Skip them and the other 25 columns still
-build: pass `--no-summaries`, and the retrieval tests skip themselves.
+`OPENAI_API_KEY` is required for the extraction, comparison and summary.
 
 The EMA medicines table is downloaded on every run from
 [EMA's medicine data page](https://www.ema.europa.eu/en/medicines/download-medicine-data)
@@ -194,8 +199,8 @@ a stale copy produces out-of-date Commission decision dates rather than an error
 The real header row of that export sits on row 9, hence `header=8`.
 
 The procedural steps PDFs behind `New indication PDF` and `EMA date for extension`
-are downloaded by the run itself, from the link on each medicine's EPAR page. Drop
-a PDF into `data/ema_pdf/` by hand and that copy is used instead.
+are downloaded by the run itself from the link on each medicine's EPAR page. 
+If you place a PDF file directly in `data/ema_pdf/`, that file will be used instead.
 
 ---
 
@@ -302,72 +307,3 @@ prediction scores 1.0, correctly, but an unannotated column is all blanks too an
 would otherwise look perfect off no evidence.
 
 ---
-
-## Known limitations and future work
-
-**1. The gold set here is a stand-in.** The reference summaries this was
-evaluated against are internal material and cannot go in a personal repository,
-so neither they nor any number from them is here.
-`evaluation/gold_chmp_2026_07.csv` is a substitute built from the public EMA
-pages and checked by hand against each medicine's EPAR overview or variation
-diff — a worked example of the evaluation, not its result. `Full Indication`,
-the similarity columns and the PDF columns are blank in it.
-
-To get a number out of *this repository*, annotate ~30–50 medicines (two to
-three meetings). Rows are not `n`: only extensions have a variation page, so the
-diff columns get about half the rows — `labelled=7` and `labelled=3` on the
-committed set. At an observed 90%, a Wilson 95% interval is ±0.15 at n=16 and
-±0.11 at n=30. Annotate for spread, and include the medicines whose diff is many
-small fragments — those are what the summary step exists for.
-
-Note also that any NICE-similarity figure from before commit `bfdadd4` is wrong:
-`N/A` was scored as an explicit "No" rather than excluded.
-
-**2. `supported_fraction` is lexical, not semantic.** It is wrong in both
-directions — a correct paraphrase scores low, a false claim assembled from words
-that are in the sources scores high. An entailment check is the version this
-should have been.
-
-**3. The PDF columns cover extensions only.** `New indication PDF` and `EMA
-date for extension` come from EMA's procedural steps PDF, which the run now
-downloads itself from the link on each EPAR page. Only authorised medicines have
-one, so a first authorisation leaves both columns `N/A` — there is no
-post-authorisation history to read. The extraction is also the weakest step in
-the pipeline: on the committed October 2024 run the model answered
-`I don't know.` for two of five PDFs, because the prompt keys off one exact
-table header (`Commission Decision Issued2 / amended`) and the layout of these
-documents varies.
-
-**4. The NICE side is shallow.** The similarity columns compare against the NICE
-*search results page*, not the guidance document — "does a NICE result look
-related", not "NICE has appraised this indication".
-
-**5. Retrieval was never tuned.** Chunk size 1200, overlap 200, top-4, one query
-string: all first guesses from the original notebook. `check_retrieval` exists to
-measure the effect of changing them but has only run against a stub embedder.
-`add_summaries` does not expose `k`, the index is rebuilt in memory every run
-though `build_store(persist_dir=...)` supports persistence, and a hybrid search
-on the `[ADDED]`/`[REMOVED]` markers is the obvious next thing to try.
-
-**6. One meeting at a time.** Only the most recent Meeting Highlights is ever
-read, so no trend analysis — EMA-to-NICE lag, variation by therapy area — is
-possible without a backfill.
-
----
-
-## Objectives
-
-Build a consistent database of regulatory and HTA guidance on medicines, by
-automating the collection step by step from EMA and NICE.
-
-## AI Utilization
-
-- **GPT-4o mini** — chosen over Llama 3.1 for speed. Two jobs: extracting
-  structured fields verbatim from HTML, PDFs and NICE pages, and writing the
-  `What changed` summary from retrieved passages.
-- **`text-embedding-3-small`** over EMA and NICE pages, chunked with LangChain
-  and indexed in Chroma. Used by the summary step only.
-- **Evaluation** — exact match for the extractions, ROUGE-1/2/L for the
-  summaries, plus three checks that need no labels: grounding, retrieval recall
-  against EMA's own markup, and supported fraction.
-- **Output** — Excel/CSV, 25 columns per medicine, 27 with the summaries.
