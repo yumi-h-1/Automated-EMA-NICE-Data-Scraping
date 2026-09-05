@@ -16,13 +16,13 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
 
 ## AI Utilization
 
-- **GPT-4o mini** — It does two jobs: extracting structured fields from EMA pages, PDFs and NICE pages, and writing the
+- **GPT-4o mini**. It does two jobs: extracting structured fields from EMA pages, PDFs and NICE pages, and writing the
   `What changed` summary.
 - **`text-embedding-3-small`** - This chunks EMA and NICE pages with LangChain
   and indexed in Chroma. Used by the summary step.
-- **Evaluation** — Three types: exact match for the extractions, binary classification, ROUGE-1/2/L for the
+- **Evaluation**. Three types: exact match for the extractions, binary classification, ROUGE-1/2/L for the
   summaries.
-- **Output** — An Excel/CSV file.
+- **Output**. An Excel/CSV file.
 
 
 ## Pipeline
@@ -51,7 +51,7 @@ flowchart LR
 Three things in that diagram are easy to get backwards:
 
 - **BeautifulSoup and the model are not alternatives.** Trimming runs *first* and
-  produces the input the model reads — the raw Keytruda EPAR is 132,209 tokens,
+  produces the input the model reads. The raw Keytruda EPAR is 132,209 tokens,
   past the 128k window, and 16,761 after narrowing. What splits the work after
   that is the shape of the data, not what either tool is capable of: fields with
   a fixed position in the DOM (`dt`/`dd` pairs, the ATC code, links, the NICE
@@ -93,7 +93,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 | `Cancer` | Whether oncology drug (L01/L02) | Derived from therapy class |
 | `Orphan` | Orphan medicine designation | EMA medicine list |
 
-### Summary (optional — added by `summarise.add_summaries`)
+### Summary (optional, added by `summarise.add_summaries`)
 
 | Feature | Description | Source |
 |---|---|---|
@@ -176,7 +176,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 Two ways in, depending on who is running it. Both do the same work in the same
 order, and both write `results/final_EMA_dataset.xlsx`.
 
-### In the browser — no install
+### In the browser, with no install
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yumi-h-1/Automated-EMA-NICE-Data-Scraping/blob/main/notebooks/EMA_data_scraping.ipynb)
 
@@ -201,8 +201,7 @@ python run_pipeline.py
 ```
 
 `run_pipeline.py` calls the same functions the notebook calls, in the same
-order — the notebook is for reading the result, the script is for reproducing
-it. A full run takes roughly two minutes.
+order. The notebook is for reading the result, the script is for reproducing it. A full run takes roughly two minutes.
 
 ```bash
 python run_pipeline.py --no-summaries       # skip retrieval; no heavy dependencies needed
@@ -232,14 +231,16 @@ If you place a PDF file directly in `data/ema_pdf/`, that file will be used inst
 
 ## Retrieval
 
-Every indication column is an **extraction** — the answer is on the page, word
-for word — so the trimmed page goes straight into the prompt and nothing is
+Every indication column is an **extraction**, meaning the answer is on the page
+word for word, so the trimmed page goes straight into the prompt and nothing is
 searched.
 
-`What changed` is the exception. It reads across a whole EPAR, the variation
-diff and the NICE result at once. The raw Keytruda EPAR page measures 132,209
-tokens, over the model's 128k window, which is why every page is narrowed before
-it reaches a prompt at all. That step retrieves instead:
+`What changed` is the exception, and it is the only column the model is allowed
+to write rather than copy. That is exactly where it could invent something, so
+retrieval is there for one reason: to keep the summary tied to the pages it came
+from. The model is given numbered passages pulled from those pages and nothing
+else, and it has to cite one per sentence. A sentence with no citation is a
+sentence it did not get from a source.
 
 ```
 pages ─▶ to_markers ─▶ RecursiveCharacterTextSplitter ─▶ OpenAIEmbeddings ─▶ Chroma
@@ -263,7 +264,7 @@ formatting."*
 
 The marked-up fragments are pinned into the prompt whatever the search returns.
 Passages are numbered `[S1]`, `[S2]`, … and the prompt requires a citation per
-sentence — an uncited sentence is one the model did not get from the sources.
+sentence, so an uncited sentence is one the model did not get from the sources.
 
 Only this step needs the retrieval packages from [Setup](#setup).
 
@@ -283,7 +284,7 @@ pytest tests/                       # 80 tests, offline, ~3s
 python tests/fetch_fixtures.py      # refresh the saved pages
 ```
 
-**2. Grounding and cross-checks — no labels.** `cross_check.py` compares the
+**2. Grounding and cross-checks, with no labels.** `cross_check.py` compares the
 dataset with EMA's own published exports: the post-authorisation table validates
 which medicines had an extension and when, the medicines table validates the
 Commission decision dates. `grounding.py` checks that every extracted phrase is
@@ -297,13 +298,13 @@ python evaluation/cross_check.py results/final_EMA_dataset.xlsx
 The summary needs its own version of this, being the one output allowed to
 rephrase. `grounding.check_retrieval` and `check_summaries` report:
 
-- **Retrieval recall** — of the spans EMA marked up, how many the search found.
-- **`supported_fraction`** — how much of the summary's vocabulary is in the
+- **Retrieval recall**: of the spans EMA marked up, how many the search found.
+- **`supported_fraction`**: how much of the summary's vocabulary is in the
   passages it was given. Catches what ROUGE cannot: a fluent sentence about a
   trial result no source mentioned.
-- **`citation_rate`** — sentences citing a passage that was really retrieved.
+- **`citation_rate`**: sentences citing a passage that was really retrieved.
 
-**3. Scored against a gold file — needs labels.** Four kinds of answer, four
+**3. Scored against a gold file, which needs labels.** Four kinds of answer, four
 metrics:
 
 | Output | Metric |
@@ -315,8 +316,8 @@ metrics:
 
 ROUGE is never the headline. An answer that flips a negation ("is **not**
 indicated … HER2-**negative**") still scores ROUGE-L ≈ 0.91 against the correct
-text, so exact match leads for the extractions, and the summary — the one output
-with no single correct wording — is read beside `supported_fraction`.
+text, so exact match leads for the extractions, and the summary, the one output
+with no single correct wording, is read beside `supported_fraction`.
 
 ```bash
 python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chmp_2026_07.csv
@@ -324,8 +325,8 @@ python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chm
 
 `gold_chmp_2026_07.csv` covers the 16 medicines of the July 2026 meeting:
 `What changed` for each, and the two diff columns off the markup; see
-limitation 1. For another meeting, copy `gold_template.csv` —
-`grounding.marked_up_fragments` gives you those two columns, the rest is
+limitation 1. For another meeting, copy `gold_template.csv`.
+`grounding.marked_up_fragments` gives you those two columns, and the rest is
 annotation.
 
 The report prints `labelled=` beside `n=`. A blank reference against a blank
