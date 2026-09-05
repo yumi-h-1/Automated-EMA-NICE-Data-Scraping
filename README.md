@@ -33,7 +33,7 @@ flowchart LR
     B --> C["Extract\nGPT-4o mini"]
     B --> D["Chunk + embed\nLangChain → Chroma"]
     D --> E["Summarise\nGPT-4o mini"]
-    C --> F["dataset\n25 columns + 2"]
+    C --> F["Excel or CSV file"]
     E --> F
 ```
 
