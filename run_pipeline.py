@@ -2,7 +2,7 @@
 """Run the whole pipeline from the terminal, without Jupyter.
 
 Does exactly what notebooks/EMA_data_scraping.ipynb does, in the same order,
-by calling the same functions — the notebook is for reading the result, this is
+by calling the same functions. The notebook is for reading the result; this is
 for reproducing it.
 
     python run_pipeline.py                     # full run into results/
@@ -154,7 +154,7 @@ def main():
         missing = dataset.loc[dataset[column].astype(str) == 'N/A', 'Product Name'].tolist()
         if missing:
             broken = True
-            print(f'\nWARNING: {column} is missing for {missing} — check the EMA page layout')
+            print(f'\nWARNING: {column} is missing for {missing}. Check the EMA page layout.')
 
     print(f'\nSaved {excel} ({dataset.shape[0]} rows, {dataset.shape[1]} columns)')
     return 1 if broken else 0
