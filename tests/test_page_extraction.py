@@ -137,7 +137,7 @@ def test_nice_search_is_still_server_rendered(soup):
 def test_procedural_pdf_link_is_on_the_epar_page(offline):
     """Regression: this PDF used to be the one step downloaded by hand.
 
-    The link carries no useful anchor text — it reads 'View' — so the fixed
+    The link carries no useful anchor text, since it reads 'View', so the fixed
     path segment is the only thing to match on. If EMA moves it, both PDF
     columns silently go back to 'N/A'.
     """

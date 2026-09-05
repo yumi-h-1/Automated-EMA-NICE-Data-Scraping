@@ -1,8 +1,8 @@
 """Retrieval tests.
 
-Everything that needs no API key — turning markup into text, building the
-documents, reading the markers back out — is tested directly, including against
-the saved Enhertu variation page. The two tests that need the optional
+Everything that needs no API key is tested directly: turning markup into text,
+building the documents, and reading the markers back out, including against the
+saved Enhertu variation page. The two tests that need the optional
 LangChain/Chroma dependencies skip themselves when those are missing.
 """
 
@@ -86,7 +86,7 @@ class TestDocuments:
         ]
 
     def test_pages_that_were_never_fetched_are_skipped(self):
-        """Jivi has no variation page and no NICE hit — neither is indexed."""
+        """Jivi has no variation page and no NICE hit, so neither is indexed."""
         documents = rag.documents_from_dataset(DATASET, PAGES, NICE_TEXTS)
         assert [d for d in documents if d['metadata']['product'] == 'jivi'] == documents[3:]
 
