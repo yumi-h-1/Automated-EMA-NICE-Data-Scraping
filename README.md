@@ -29,13 +29,41 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
 
 ```mermaid
 flowchart LR
-    A["EMA & NICE\npages, PDFs"] --> B["Scrape\n+ trim"]
-    B --> C["Extract\nGPT-4o mini"]
-    B --> D["Chunk + embed\nLangChain → Chroma"]
-    D --> E["Summarise\nGPT-4o mini"]
-    C --> F["Excel or CSV file"]
-    E --> F
+    N["EMA news\nlisting"] --> MH["CHMP Meeting\nHighlights"]
+    MH --> FET["Fetch EPAR, variation\nand NICE pages"]
+    MH --> PDF["Download procedural\nsteps PDF"]
+
+    FET --> TRIM["BeautifulSoup\nstrip noise, narrow to\nthe indication section"]
+    TRIM --> PG["pages\ntrimmed markup,\nstrong and s preserved"]
+
+    PG --> BS["BeautifulSoup reads\nINN, MA holder, ATC,\ndates, NICE hit"]
+    PG --> EXT["GPT-4o mini\nindication columns"]
+    PG --> IDX["to_markers, chunk 1200/200,\nembed, Chroma"]
+    PDF --> PEX["pypdf then GPT-4o mini\nPDF columns"]
+
+    IDX --> RET["Retrieve top-4,\nfiltered by product"]
+    RET --> SUM["GPT-4o mini summary\ncited S1..S4"]
+
+    BS --> OUT["Excel or CSV file\n25 columns + 2"]
+    EXT --> OUT
+    PEX --> OUT
+    SUM --> OUT
 ```
+
+Three things in that diagram are easy to get backwards:
+
+- **BeautifulSoup and the model are not alternatives.** Trimming runs *first* and
+  produces the input the model reads — the raw Keytruda EPAR is 132,209 tokens,
+  past the 128k window, and 16,761 after narrowing. What splits the work after
+  that is the shape of the data, not what either tool is capable of: fields with
+  a fixed position in the DOM (`dt`/`dd` pairs, the ATC code, links, the NICE
+  result title) are read by BeautifulSoup, and free prose that no selector can
+  address (the indication sentence, the diff, the PDF table) goes to the model.
+- **The vector store is fed from `pages`, not from the extracted columns.** The
+  summary re-reads the trimmed pages independently, so an extraction error
+  cannot propagate into it, and `grounding.py` can score the two separately.
+- **The PDF never enters the vector store.** Its text goes straight into the two
+  PDF prompts and stops there.
 
 ---
 
