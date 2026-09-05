@@ -40,8 +40,7 @@ flowchart LR
     TRIM --> IDX["Chroma DB: Medicine indication from CHMP, \nsearch result from NICE"]
     PDF --> PEX["pypdf then GPT-4o mini extracts\nPDF columns"]
 
-    IDX --> RET["Retrieve top-4,\nfiltered by product"]
-    RET --> SUM["GPT-4o mini summary"]
+    IDX --> SUM["GPT-4o mini summary"]
 
     BS --> OUT["Excel or CSV file"]
     EXT --> OUT
