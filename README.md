@@ -29,7 +29,7 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
 
 ```mermaid
 flowchart LR
-    N["EMA news\nlisting"] --> MH["CHMP Meeting\nHighlights"]
+    N["EMA news"] --> MH["CHMP Meeting\nHighlights"]
     MH --> FET["Fetch EPAR, variation\nand NICE pages"]
     MH --> PDF["Download procedural\nsteps PDF"]
 
