@@ -89,6 +89,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 ## Project Structure
 
 ```
+├── run_pipeline.py                  # Terminal entry point; same steps as the notebook
 ├── notebooks/
 │   ├── EMA_data_scraping.ipynb      # Main notebook (Colab or local Jupyter)
 │   └── (Llama3_1)Experiment_...ipynb  # First RAG attempt: Ollama/HF + LangChain + Chroma
@@ -133,25 +134,68 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 
 ---
 
-## Setup
+## Running it
+
+Two ways in, depending on who is running it. Both do the same work in the same
+order, and both write `results/final_EMA_dataset.xlsx`.
+
+### In the browser — no install
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yumi-h-1/Automated-EMA-NICE-Data-Scraping/blob/main/notebooks/EMA_data_scraping.ipynb)
+
+Open `notebooks/EMA_data_scraping.ipynb` in Colab and run the cells. The setup
+cell clones this repository and installs everything, so nothing has to be
+installed locally. Store your key as a Colab secret named `OPENAI_API_KEY`; the
+setup cell copies it into `os.environ`.
+
+This is the path to send someone who just wants the spreadsheet.
+
+### From the terminal
 
 ```bash
+git clone https://github.com/yumi-h-1/Automated-EMA-NICE-Data-Scraping
+cd Automated-EMA-NICE-Data-Scraping
+
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # then add your OpenAI key
+
+cp .env.example .env        # add your OpenAI key; config.py loads this file
+python run_pipeline.py
 ```
 
-The pipeline reads `OPENAI_API_KEY` from the environment. In Colab, store it as a
-notebook secret; the setup cell copies it into `os.environ`.
+`run_pipeline.py` calls the same functions the notebook calls, in the same
+order — the notebook is for reading the result, the script is for reproducing
+it. A full run takes roughly two minutes.
 
-`requirements.txt` includes the four retrieval packages
-(`langchain-text-splitters`, `langchain-openai`, `langchain-chroma`, `chromadb`).
-They are only used by the summary step — skip them and everything else still
-imports and runs, and the retrieval tests skip themselves.
+```bash
+python run_pipeline.py --no-summaries       # skip retrieval; no heavy dependencies needed
+python run_pipeline.py --output-dir /tmp/x  # write somewhere other than results/
+python run_pipeline.py --no-refresh         # keep the cached EMA medicines table
+python run_pipeline.py --help
+```
 
-The EMA medicines table is downloaded from
+It exits non-zero if a column that should never be empty came back `N/A`, so it
+can be run on a schedule and its exit status believed.
+
+### Dependencies
+
+`OPENAI_API_KEY` is required — the extraction, comparison and summary columns
+are all model calls. Without it only the scraped columns fill in.
+
+Everything except the retrieval packages is small. `chromadb` and the three
+`langchain-*` packages are needed **only** by the summary step, and they are by
+far the heaviest part of the install. Skip them and the other 25 columns still
+build: pass `--no-summaries`, and the retrieval tests skip themselves.
+
+The EMA medicines table is downloaded on every run from
 [EMA's medicine data page](https://www.ema.europa.eu/en/medicines/download-medicine-data)
-(now published as `medicines-output-medicines-report_en.xlsx`). The real header row
-of that export sits on row 9, hence `header=8`.
+(published as `medicines-output-medicines-report_en.xlsx`). It changes weekly, and
+a stale copy produces out-of-date Commission decision dates rather than an error.
+The real header row of that export sits on row 9, hence `header=8`.
+
+The procedural steps PDFs behind `New indication PDF` and `EMA date for extension`
+are downloaded by the run itself, from the link on each medicine's EPAR page. Drop
+a PDF into `data/ema_pdf/` by hand and that copy is used instead.
 
 ---
 
@@ -162,9 +206,9 @@ for word — so the trimmed page goes straight into the prompt and nothing is
 searched.
 
 `What changed` is the exception. It reads across a whole EPAR, the variation
-diff and the NICE result, which does not fit: an untrimmed Keytruda EPAR is
-~200k tokens, so `llm.truncate` starts cutting and whatever it cuts is gone
-silently. That step retrieves instead:
+diff and the NICE result at once. The raw Keytruda EPAR page measures 132,209
+tokens, over the model's 128k window, which is why every page is narrowed before
+it reaches a prompt at all. That step retrieves instead:
 
 ```
 pages ─▶ to_markers ─▶ RecursiveCharacterTextSplitter ─▶ OpenAIEmbeddings ─▶ Chroma
