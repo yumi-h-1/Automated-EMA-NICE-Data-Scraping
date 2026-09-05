@@ -37,7 +37,7 @@ flowchart LR
 
     TRIM --> BS["BeautifulSoup reads\nINN, MA holder, ATC,\ndates, NICE hit"]
     TRIM --> EXT["GPT-4o mini\nindication columns"]
-    TRIM --> IDX["to_markers, chunk 1200/200,\nembed, Chroma"]
+    TRIM --> IDX["Chroma DB: Medicine indication from CHMP, \nsearch result from NICE"]
     PDF --> PEX["pypdf then GPT-4o mini\nPDF columns"]
 
     IDX --> RET["Retrieve top-4,\nfiltered by product"]
