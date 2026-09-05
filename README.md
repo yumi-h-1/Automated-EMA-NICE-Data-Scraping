@@ -34,11 +34,10 @@ flowchart LR
     MH --> PDF["Download procedural\nsteps PDF"]
 
     FET --> TRIM["BeautifulSoup\nstrip noise, narrow to\nthe indication section"]
-    TRIM --> PG["pages\ntrimmed markup,\nstrong and s preserved"]
 
-    PG --> BS["BeautifulSoup reads\nINN, MA holder, ATC,\ndates, NICE hit"]
-    PG --> EXT["GPT-4o mini\nindication columns"]
-    PG --> IDX["to_markers, chunk 1200/200,\nembed, Chroma"]
+    TRIM --> BS["BeautifulSoup reads\nINN, MA holder, ATC,\ndates, NICE hit"]
+    TRIM --> EXT["GPT-4o mini\nindication columns"]
+    TRIM --> IDX["to_markers, chunk 1200/200,\nembed, Chroma"]
     PDF --> PEX["pypdf then GPT-4o mini\nPDF columns"]
 
     IDX --> RET["Retrieve top-4,\nfiltered by product"]
