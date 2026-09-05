@@ -22,7 +22,7 @@ flowchart LR
     B --> C["Extract\nGPT-4o mini"]
     B --> D["Chunk + embed\nLangChain → Chroma"]
     D --> E["Summarise\nGPT-4o mini"]
-    C --> F["dataset\n26 columns + 2"]
+    C --> F["dataset\n25 columns + 2"]
     E --> F
 ```
 
@@ -30,7 +30,7 @@ flowchart LR
 
 ## Output Dataset
 
-Each row represents one medicine from the latest CHMP Meeting Highlights. 26 features are collected per medicine across four categories, plus two more when the summary step has run.
+Each row represents one medicine from the latest CHMP Meeting Highlights. 25 features are collected per medicine across four categories, plus two more when the summary step has run.
 
 ### Identification
 
@@ -110,6 +110,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 26 fea
 │   ├── compare_nice_and_indication.py
 │   ├── text_fromNICE.py
 │   ├── extract_text_from_pdf.py
+│   ├── download_procedural_pdf.py   # Finds and fetches the procedural steps PDF
 │   └── get_chmp_opinion_date.py
 ├── tests/
 │   ├── fetch_fixtures.py            # Re-downloads the saved pages
@@ -203,7 +204,7 @@ the scrapers depend on, so a redesign fails a test instead of producing an empty
 file.
 
 ```bash
-pytest tests/                       # 76 tests, offline, ~3s
+pytest tests/                       # 80 tests, offline, ~3s
 python tests/fetch_fixtures.py      # refresh the saved pages
 ```
 
@@ -283,9 +284,15 @@ directions — a correct paraphrase scores low, a false claim assembled from wor
 that are in the sources scores high. An entailment check is the version this
 should have been.
 
-**3. The PDFs are still manual.** `New indication PDF` and `EMA date for
-extension` come from EMA's procedural steps PDFs, downloaded by hand because EMA
-does not link them predictably. Skip that and both columns are `N/A`.
+**3. The PDF columns cover extensions only.** `New indication PDF` and `EMA
+date for extension` come from EMA's procedural steps PDF, which the run now
+downloads itself from the link on each EPAR page. Only authorised medicines have
+one, so a first authorisation leaves both columns `N/A` — there is no
+post-authorisation history to read. The extraction is also the weakest step in
+the pipeline: on the committed October 2024 run the model answered
+`I don't know.` for two of five PDFs, because the prompt keys off one exact
+table header (`Commission Decision Issued2 / amended`) and the layout of these
+documents varies.
 
 **4. The NICE side is shallow.** The similarity columns compare against the NICE
 *search results page*, not the guidance document — "does a NICE result look
@@ -319,4 +326,4 @@ automating the collection step by step from EMA and NICE.
 - **Evaluation** — exact match for the extractions, ROUGE-1/2/L for the
   summaries, plus three checks that need no labels: grounding, retrieval recall
   against EMA's own markup, and supported fraction.
-- **Output** — Excel/CSV, 26 columns per medicine, 28 with the summaries.
+- **Output** — Excel/CSV, 25 columns per medicine, 27 with the summaries.
