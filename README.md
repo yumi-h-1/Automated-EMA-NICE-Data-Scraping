@@ -103,7 +103,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 
 | Feature | Description | Source |
 |---|---|---|
-| `What changed` | One or two plain sentences on what this meeting changed, with `[S#]` citations | Passages retrieved from the EPAR, variation and NICE pages |
+| `What changed` | One or two plain sentences on what this meeting changed | Passages retrieved from the EPAR, variation and NICE pages |
 | `Summary sources` | Which documents the retriever supplied for that summary | Retrieval metadata |
 
 ### Regulatory Dates
