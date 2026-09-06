@@ -161,7 +161,7 @@ Each row represents one medicine from the latest CHMP Meeting Highlights. 25 fea
 │   ├── fixtures/                    # Saved EMA/NICE pages (gzipped)
 │   └── test_*.py                    # Offline regression tests
 ├── evaluation/
-│   ├── metrics.py                   # ROUGE + exact match + classification + summary metrics
+│   ├── metrics.py                   # Exact match, classification, and ROUGE for the summary
 │   ├── grounding.py                 # Label-free: is every answer really on the page?
 │   │                                #   and: did retrieval find what EMA marked up?
 │   ├── cross_check.py               # Label-free: does it match EMA's own exports?
@@ -293,15 +293,18 @@ metrics:
 
 | Output | Metric |
 |---|---|
-| The four indication fields | **Exact match**, with ROUGE-1/2/L and token precision/recall alongside |
+| The four indication fields | **Exact match** |
 | `EMA date for extension` | **Exact match**, format-tolerant |
 | The three similarity fields | **Accuracy, precision, recall, F1** |
 | `What changed` | **ROUGE-1/2/L** against a reference summary, read next to the label-free numbers above |
 
-ROUGE is never the headline. An answer that flips a negation ("is **not**
-indicated … HER2-**negative**") still scores ROUGE-L ≈ 0.91 against the correct
-text, so exact match leads for the extractions, and the summary, the one output
-with no single correct wording, is read beside `supported_fraction`.
+ROUGE appears once, on the summary, and nowhere else. The indication fields and
+the date are extractions: the answer is the page's own wording or it is wrong,
+and a partial-overlap score on them only rewards a near miss. It would also
+mislead — an answer that flips a negation ("is **not** indicated …
+HER2-**negative**") still scores ROUGE-L ≈ 0.91 against the correct text. The
+summary is the one output with no single correct wording, which is the case
+ROUGE is built for, and even there it is read beside `supported_fraction`.
 
 ```bash
 python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chmp_2026_07.csv
@@ -320,49 +323,42 @@ The report prints `labelled=` beside `n=`. A blank reference against a blank
 prediction scores 1.0, correctly, but an unannotated column is all blanks too and
 would otherwise look perfect off no evidence.
 
-`unparseable_rate` sits beside the date and yes/no numbers. It is the share of
-*labelled* rows where the pipeline's own answer could not be read as an answer at
-all: a date in no recognised format, or a NICE judgement that came back blank
-instead of Yes/No. It separates "the model was wrong" from "the model said
-nothing", which accuracy alone merges into a single failure.
-
 ### Results, July 2026 meeting
 
 16 medicines, scored against `gold_chmp_2026_07.csv`. `n` is the medicines
 scored, `labelled` the ones the gold file has an answer for.
 
-**Verbatim extraction.** Exact match is the headline; ROUGE says how near the
-misses were.
+**Verbatim extraction.** Exact match.
 
-| Field | labelled | Exact match | ROUGE-L | Token precision | Token recall |
-|---|---|---|---|---|---|
-| `Full Indication` | 16 | 0.500 | 0.858 | 0.980 | 0.811 |
-| `New indication HTML` | 6 | 0.875 | 0.935 | 0.933 | 0.938 |
-| `New indication PDF` | 3 | 0.500 | 0.599 | 0.688 | 0.568 |
-| `Removed indication HTML` | 2 | 0.688 | 0.688 | 0.688 | 0.688 |
+| Field | labelled | Exact match |
+|---|---|---|
+| `Full Indication` | 16 | 0.500 |
+| `New indication HTML` | 6 | 0.875 |
+| `New indication PDF` | 3 | 0.500 |
+| `Removed indication HTML` | 2 | 0.688 |
 
-`Full Indication` is the pattern worth reading: precision 0.980 against recall
-0.811 means the text it returns is almost always really on the page, and what it
-loses it loses by stopping early. That is the failure you want of the two, and it
-is why exact match sits at 0.500 while ROUGE-L is 0.858 — most misses are a
-truncated indication, not an invented one. The PDF column is the weakest, and the
-smallest: 3 labels is a sample to read by hand, not a number to quote.
+`New indication HTML` scores highest, which is what the bold markup buys: it
+tells the model exactly which span to copy. `Full Indication` sits at 0.500, and
+reading the eight misses shows one failure mode rather than eight — in seven of
+them the model returned a shorter span than the reference, stopping early inside
+a long indication rather than inventing text. The PDF column is the weakest, and
+the smallest: 3 labels is a sample to read by hand, not a number to quote.
 
 **Dates and yes/no judgements.**
 
-| Field | n | Accuracy | Precision | Recall | F1 | Unparseable |
-|---|---|---|---|---|---|---|
-| `EMA date for extension` | 3 | 0.667 | — | — | — | 0.000 |
-| `Search Result in NICE` | 9 | 0.667 | 1.000 | 0.667 | 0.800 | 0.333 |
-| `Full Indication Similarity` | 8 | 0.625 | 1.000 | 0.625 | 0.769 | 0.000 |
+| Field | n | Accuracy | Precision | Recall | F1 |
+|---|---|---|---|---|---|
+| `EMA date for extension` | 3 | 0.667 (exact match) | — | — | — |
+| `Search Result in NICE` | 9 | 0.667 | 1.000 | 0.667 | 0.800 |
+| `Full Indication Similarity` | 8 | 0.625 | 1.000 | 0.625 | 0.769 |
 
 Both yes/no fields have precision 1.000 with recall around 0.65: every Yes it
 gives is right, and it misses about a third of them. For `Search Result in NICE`
-the whole gap is the `unparseable_rate` of 0.333 — three medicines where the
-lookup returned nothing at all rather than a wrong answer, so the fix is in
-retrieval, not in the judgement. Note also that the gold file has no `No` rows
-for these fields, so precision is measured against no negatives; it says the Yes
-answers are right, not that the model would refuse a bad match.
+the whole gap is three medicines where the lookup came back blank rather than
+wrong, so the fix is in the search step, not in the judgement. Note also that the
+gold file has no `No` rows for these fields, so precision is measured against no
+negatives; it says the Yes answers are right, not that the model would refuse a
+bad match.
 
 **Summary.** `What changed`, all 16 labelled: ROUGE-1 0.554, ROUGE-2 0.394,
 ROUGE-L 0.502. This is the number to trust least on its own, for the reason
