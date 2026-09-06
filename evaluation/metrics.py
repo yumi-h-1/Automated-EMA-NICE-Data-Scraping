@@ -4,29 +4,27 @@ The pipeline asks the model for three different kinds of answer, and they need
 three different kinds of metric:
 
   1. Verbatim span extraction (the four indication fields). The model is meant to
-     copy wording out of the page, not to paraphrase it, so the headline number
-     is exact match after normalisation. ROUGE-L is reported alongside it as a
-     "how close was the miss" measure, and token precision/recall separate the
-     two failure modes ROUGE-L F1 hides: text the model invented (low precision)
-     versus text it dropped (low recall).
-  2. A date ('EMA date for extension'). Only exact match means anything here;
-     a ROUGE score on a date string is noise.
+     copy wording out of the page, not to paraphrase it, so the only meaningful
+     number is exact match after normalisation. An overlap score would reward a
+     near miss on an answer that is either the page's wording or wrong.
+  2. A date ('EMA date for extension'). Exact match again, tolerant of the
+     format the date is written in.
   3. A yes/no judgement (the NICE similarity fields, 'Search Result in NICE').
      This is binary classification: accuracy, precision, recall and F1. F1 is
      the one to read, since the 'Yes' class is usually the larger one and
      accuracy alone flatters a model that answers 'Yes' to everything.
   4. A summary ('What changed'). This is the only output with no single correct
      wording, which is what ROUGE is actually for: n-gram overlap against a
-     reference summary written by a health economist. It is also the only output
-     that can invent something, so it is never scored on ROUGE alone: two
-     label-free numbers go with it, `supported_fraction` (how much of the
-     summary appears in the passages it was given) and `citation_rate` (how many
+     reference summary written by a health economist. This is the one output
+     ROUGE is used on. It is also the only output that can invent something, so
+     it is never scored on ROUGE alone: two label-free numbers go with it in
+     `evaluation/grounding.py`, `supported_fraction` (how much of the summary
+     appears in the passages it was given) and `citation_rate` (how many
      sentences cite a passage that was really retrieved).
 """
 
 import re
 import unicodedata
-from collections import Counter
 from datetime import datetime
 
 from rouge_score import rouge_scorer
@@ -81,34 +79,20 @@ def is_empty(text):
 # --- 1. verbatim span extraction --------------------------------------------
 
 def span_scores(prediction, reference):
-    """Per-example scores for one extracted span."""
+    """Exact match for one extracted span, after normalisation."""
     pred, ref = normalise(prediction), normalise(reference)
 
     # Both blank is a correct "nothing to extract"; one blank is a clear miss.
     if not ref and not pred:
-        return {'exact_match': 1.0, 'rouge1_f': 1.0, 'rouge2_f': None,
-                'rougeL_f': 1.0, 'precision': 1.0, 'recall': 1.0}
+        return {'exact_match': 1.0}
     if not ref or not pred:
-        return {'exact_match': 0.0, 'rouge1_f': 0.0, 'rouge2_f': None,
-                'rougeL_f': 0.0, 'precision': 0.0, 'recall': 0.0}
+        return {'exact_match': 0.0}
 
-    rouge = _SCORER.score(ref, pred)
-    pred_counts, ref_counts = Counter(pred.split()), Counter(ref.split())
-    overlap = sum((pred_counts & ref_counts).values())
-
-    return {
-        'exact_match': float(pred == ref),
-        'rouge1_f': rouge['rouge1'].fmeasure,
-        # A bigram score needs at least two reference tokens to mean anything.
-        'rouge2_f': rouge['rouge2'].fmeasure if len(ref.split()) > 1 else None,
-        'rougeL_f': rouge['rougeL'].fmeasure,
-        'precision': overlap / sum(pred_counts.values()),
-        'recall': overlap / sum(ref_counts.values()),
-    }
+    return {'exact_match': float(pred == ref)}
 
 
 def span_report(predictions, references):
-    """Mean scores over a list of (prediction, reference) pairs.
+    """Mean exact match over a list of (prediction, reference) pairs.
 
     `labelled` counts the pairs whose reference is not empty. It matters
     because a blank reference and a blank prediction score 1.0 here, correctly,
@@ -123,9 +107,7 @@ def span_report(predictions, references):
     report = {'n': len(pairs),
               'labelled': sum(1 for r in references if not is_empty(r))}
     for key in pairs[0]:
-        scored = [p[key] for p in pairs if p[key] is not None]
-        if scored:
-            report[key] = sum(scored) / len(scored)
+        report[key] = sum(p[key] for p in pairs) / len(pairs)
     return report
 
 
@@ -142,20 +124,18 @@ def parse_date(value):
 
 
 def date_report(predictions, references):
-    """Exact-match accuracy over dates, tolerant of formatting differences."""
-    total = correct = unparsed = 0
+    """Exact match over dates, tolerant of the format they are written in."""
+    total = correct = 0
     for pred, ref in zip(predictions, references):
         if is_empty(ref):
             continue
         total += 1
         pred_date, ref_date = parse_date(pred), parse_date(ref)
-        if pred_date is None:
-            unparsed += 1
-        elif ref_date is not None and pred_date == ref_date:
+        if pred_date is not None and pred_date == ref_date:
             correct += 1
     if total == 0:
         return {'n': 0}
-    return {'n': total, 'accuracy': correct / total, 'unparseable_rate': unparsed / total}
+    return {'n': total, 'exact_match': correct / total}
 
 
 # --- 3. yes/no judgements ----------------------------------------------------
@@ -182,7 +162,6 @@ def binary_report(predictions, references):
     if not pairs:
         return {'n': 0}
 
-    unusable = sum(1 for p, _ in pairs if p is None)
     tp = sum(1 for p, r in pairs if p is True and r is True)
     fp = sum(1 for p, r in pairs if p is True and r is False)
     fn = sum(1 for p, r in pairs if p is not True and r is True)
@@ -194,8 +173,8 @@ def binary_report(predictions, references):
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
 
-    return {'n': n, 'accuracy': accuracy, 'precision': precision, 'recall': recall,
-            'f1': f1, 'unparseable_rate': unusable / n}
+    return {'n': n, 'accuracy': accuracy, 'precision': precision,
+            'recall': recall, 'f1': f1}
 
 
 # --- 4. summaries ------------------------------------------------------------

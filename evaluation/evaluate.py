@@ -70,12 +70,12 @@ def main():
 
     pred, ref = predictions.loc[shared], gold.loc[shared]
 
-    print('\nVerbatim extraction. exact_match is the headline; ROUGE shows how near the misses were')
+    print('\nVerbatim extraction. Exact match: the answer is the page\'s own wording or it is wrong')
     for field in SPAN_FIELDS:
         if field in ref.columns and field in pred.columns:
             print(format_report(field, span_report(pred[field], ref[field])))
 
-    print('\nDates. Exact match only')
+    print('\nDates. Exact match, tolerant of the format the date is written in')
     for field in DATE_FIELDS:
         if field in ref.columns and field in pred.columns:
             print(format_report(field, date_report(pred[field], ref[field])))
@@ -91,10 +91,11 @@ def main():
         print('\nSummaries. ROUGE against the reference summary')
         for field in scored_summaries:
             print(format_report(field, summary_report(pred[field], ref[field])))
-        print('  ROUGE says how close the wording is, not whether the summary is true.')
-        print('  a flipped negation still scores near 1.0. Read the low scorers by hand,')
-        print('  and see evaluation/grounding.py for the faithfulness checks that need')
-        print('  no labels at all.')
+        print('  The summary is the only output with no single correct wording, so it is')
+        print('  the only one ROUGE is used on. ROUGE says how close the wording is, not')
+        print('  whether the summary is true: a flipped negation still scores near 1.0.')
+        print('  Read the low scorers by hand, and see evaluation/grounding.py for the')
+        print('  faithfulness checks that need no labels at all.')
 
 
 if __name__ == '__main__':
