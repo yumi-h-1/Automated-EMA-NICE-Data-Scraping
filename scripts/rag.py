@@ -265,12 +265,3 @@ def format_context(chunks):
         lines.append(f'{heading}\n{chunk["text"].strip()}')
     return '\n\n'.join(lines)
 
-
-def sources_used(chunks):
-    """The distinct documents behind a set of chunks, for the dataset column."""
-    seen = []
-    for chunk in chunks:
-        source = chunk['metadata'].get('source', 'source')
-        if source not in seen:
-            seen.append(source)
-    return ', '.join(seen)

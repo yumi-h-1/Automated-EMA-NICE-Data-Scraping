@@ -9,12 +9,12 @@ passage each sentence came from.
     from summarise import add_summaries
     add_summaries(ema_data_df, pages, nice_text_dict)
 
-Adds two columns: 'What changed' and 'Summary sources'.
+Adds one column: 'What changed'.
 """
 
 from llm import SUMMARISER_SYSTEM, ask_model, truncate
 from rag import (Retriever, build_store, documents_from_dataset, format_context,
-                 marked_spans, sources_used, to_markers)
+                 marked_spans, to_markers)
 
 
 def query_model_for_change_summary(product_name, recommendation, context, added, removed):
@@ -75,7 +75,7 @@ def diff_fragments(row, pages):
 
 def add_summaries(dataset, pages, nice_texts=None, retriever=None,
                   persist_dir=None, embeddings=None, retrieval_log=None):
-    """Add 'What changed' and 'Summary sources' to a built dataset.
+    """Add the 'What changed' column to a built dataset.
 
     Builds the index from the pages the run already fetched, so nothing is
     downloaded twice. Pass `retrieval_log` a dict to keep the retrieved chunks
@@ -87,7 +87,7 @@ def add_summaries(dataset, pages, nice_texts=None, retriever=None,
         store = build_store(documents, persist_dir=persist_dir, embeddings=embeddings)
         retriever = Retriever(store)
 
-    summaries, all_sources = [], []
+    summaries = []
 
     for _, row in dataset.iterrows():
         name = row['Product Name']
@@ -99,7 +99,6 @@ def add_summaries(dataset, pages, nice_texts=None, retriever=None,
             # Every page for this medicine was empty or failed to fetch.
             # Writing a summary anyway would hide that, so say so instead.
             summaries.append('N/A')
-            all_sources.append('no passages retrieved')
             continue
 
         added, removed = diff_fragments(row, pages)
@@ -107,9 +106,7 @@ def add_summaries(dataset, pages, nice_texts=None, retriever=None,
             name, row.get('Initial Approval', 'N/A'),
             format_context(chunks), added, removed,
         ))
-        all_sources.append(sources_used(chunks))
         print(f'  summary: {name}')
 
     dataset['What changed'] = summaries
-    dataset['Summary sources'] = all_sources
     return dataset

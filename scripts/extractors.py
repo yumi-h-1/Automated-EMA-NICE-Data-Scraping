@@ -99,6 +99,7 @@ def query_model_for_NICE_similarity(nice_text, indication):
     \"\"\"{truncate(indication, 20_000)}\"\"\"
 
     Are there any matching therapeutic indications in both texts?
-    Answer only 'Yes' or 'No' and provide any matching terms if applicable.
+    Answer with one word, 'Yes' or 'No'. Do not explain and do not list the
+    matching terms.
     """
     return ask_model(prompt, system=COMPARATOR_SYSTEM)
