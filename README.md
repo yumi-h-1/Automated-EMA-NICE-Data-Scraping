@@ -360,10 +360,16 @@ gold file has no `No` rows for these fields, so precision is measured against no
 negatives; it says the Yes answers are right, not that the model would refuse a
 bad match.
 
-**Summary.** `What changed`, all 16 labelled: ROUGE-1 0.554, ROUGE-2 0.394,
-ROUGE-L 0.502. This is the number to trust least on its own, for the reason
-above, and it is read next to `supported_fraction` and `citation_rate` from
-`grounding.py`.
+**Summary.** ROUGE-1/2/L against the reference summary.
+
+| Field | labelled | ROUGE-1 | ROUGE-2 | ROUGE-L |
+|---|---|---|---|---|
+| `What changed` | 16 | 0.554 | 0.394 | 0.502 |
+
+Every medicine has a reference summary, so this is the only table above with no
+partly labelled column. It is also the row to trust least on its own, for the
+reason above: ROUGE measures wording, not truth, so it is read next to
+`supported_fraction` and `citation_rate` from `grounding.py`.
 
 One meeting of 16 medicines is a small sample, and four of the columns above rest
 on 6 labels or fewer. These are the numbers for this run, not a general claim
