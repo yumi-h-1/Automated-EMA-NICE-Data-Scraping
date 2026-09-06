@@ -294,17 +294,9 @@ metrics:
 | Output | Metric |
 |---|---|
 | The four indication fields | **Exact match** |
-| `EMA date for extension` | **Exact match**, format-tolerant |
+| `EMA date for extension` | **Exact match** |
 | The three similarity fields | **Accuracy, precision, recall, F1** |
-| `What changed` | **ROUGE-1/2/L** against a reference summary, read next to the label-free numbers above |
-
-ROUGE appears once, on the summary, and nowhere else. The indication fields and
-the date are extractions: the answer is the page's own wording or it is wrong,
-and a partial-overlap score on them only rewards a near miss. It would also
-mislead — an answer that flips a negation ("is **not** indicated …
-HER2-**negative**") still scores ROUGE-L ≈ 0.91 against the correct text. The
-summary is the one output with no single correct wording, which is the case
-ROUGE is built for, and even there it is read beside `supported_fraction`.
+| `What changed` | **ROUGE-1/2/L** against a reference summary |
 
 ```bash
 python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chmp_2026_07.csv
@@ -315,13 +307,7 @@ annotated across every scored column: `Full Indication` and `What changed` for
 each medicine, the diff columns and `EMA date for extension` where the meeting
 produced one, and the NICE yes/no judgements where a NICE page exists. `N/A`
 means "there was nothing to annotate here", and the report counts it as
-unlabelled rather than as a blank answer the model got right. For another
-meeting, copy `gold_template.csv`. `grounding.marked_up_fragments` gives you the
-two diff columns, and the rest is annotation.
-
-The report prints `labelled=` beside `n=`. A blank reference against a blank
-prediction scores 1.0, correctly, but an unannotated column is all blanks too and
-would otherwise look perfect off no evidence.
+unlabelled rather than as a blank answer the model got right.
 
 ### Results, July 2026 meeting
 
