@@ -208,18 +208,13 @@ python run_pipeline.py
 
 `run_pipeline.py` calls the same functions the notebook calls in the same order.
 
-It exits non-zero if a column that should never be empty came back `N/A`, so it
-can be run on a schedule and its exit status believed.
-
 ### Dependencies
 
 `OPENAI_API_KEY` is required for the extraction, comparison and summary.
 
 The EMA medicines table is downloaded on every run from
 [EMA's medicine data page](https://www.ema.europa.eu/en/medicines/download-medicine-data)
-(published as `medicines-output-medicines-report_en.xlsx`). It changes weekly, and
-a stale copy produces out-of-date Commission decision dates rather than an error.
-The real header row of that export sits on row 9, hence `header=8`.
+(published as `medicines-output-medicines-report_en.xlsx`). This file seems to be changed by EMA weekly.
 
 The procedural steps PDFs behind `New indication PDF` and `EMA date for extension`
 are downloaded by the run itself from the link on each medicine's EPAR page. 
@@ -233,24 +228,15 @@ Every indication column is an **extraction**, meaning the answer is on the page
 word for word, so the trimmed page goes straight into the prompt and nothing is
 searched.
 
-`What changed` is the exception, and it is the only column the model is allowed
-to write rather than copy. That is exactly where it could invent something, so
-retrieval is there for one reason: to keep the summary tied to the pages it came
-from. The model is given numbered passages pulled from those pages and nothing
-else, and it has to cite one per sentence. A sentence with no citation is a
-sentence it did not get from a source.
+`What changed` is the summary from an AI, so retrieval is there to keep the summary tied to the pages it came from.
+The model is given numbered passages pulled from those pages and nothing else, and it has to cite one per sentence.
+A sentence with no citation is a sentence it did not get from a source.
 
 ```
 pages ─▶ to_markers ─▶ RecursiveCharacterTextSplitter ─▶ OpenAIEmbeddings ─▶ Chroma
                             1200 / 200               text-embedding-3-small      │
      GPT-4o mini ◀── numbered, citable context ◀── top-4, filtered by product ───┘
 ```
-
-Two things make it work on regulatory pages, both learned from the failed first
-attempt in [`notebooks/(Llama3_1)Experiment_...ipynb`](notebooks/) (Ollama +
-Hugging Face), whose own note says why it was dropped: *"All text on web pages is
-extracted as plain text and stored as vectors, ignoring bold or strikethrough
-formatting."*
 
 - **The markup is the signal.** `rag.to_markers` rewrites `<strong>`/`<s>` into
   `[ADDED]`/`[REMOVED]` before chunking, so EMA's diff survives embedding and
