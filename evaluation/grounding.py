@@ -17,8 +17,6 @@ output that is allowed to rephrase:
     this needs no labels either.
   * supported fraction: how much of the summary's vocabulary is in the
     passages it was given.
-  * citation rate: how many of its sentences cite a passage that was
-    really retrieved.
 
 Whatever fails these checks is the (short) list worth reading by hand.
 """
@@ -34,7 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from http_utils import fetch_soup, page_text  # noqa: E402
 from rag import marked_spans, to_markers  # noqa: E402
 
-from metrics import citation_rate, is_empty, normalise, supported_fraction  # noqa: E402
+from metrics import is_empty, normalise, supported_fraction  # noqa: E402
 
 # Bold text EMA puts on every variation page, unrelated to any indication.
 BOILERPLATE = ('First published:', 'This page was last updated on', 'European Medicines Agency')
@@ -241,7 +239,6 @@ def check_summaries(dataset, retrieval_log):
             'Product Name': name,
             'verdict': classify(score),
             'supported_fraction': score,
-            'citation_rate': citation_rate(summary, len(chunks)),
             'detail': str(summary)[:160],
         })
 

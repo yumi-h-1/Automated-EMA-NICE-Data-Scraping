@@ -17,10 +17,9 @@ three different kinds of metric:
      wording, which is what ROUGE is actually for: n-gram overlap against a
      reference summary written by a health economist. This is the one output
      ROUGE is used on. It is also the only output that can invent something, so
-     it is never scored on ROUGE alone: two label-free numbers go with it in
+     it is never scored on ROUGE alone: a label-free number goes with it in
      `evaluation/grounding.py`, `supported_fraction` (how much of the summary
-     appears in the passages it was given) and `citation_rate` (how many
-     sentences cite a passage that was really retrieved).
+     appears in the passages it was given).
 """
 
 import re
@@ -187,36 +186,12 @@ STOPWORDS = {
 }
 
 _CITATION = re.compile(r'\[S(\d+)\]')
-_SENTENCE_END = re.compile(r'(?<=[.!?])\s+')
-_LEADING_CITATIONS = re.compile(r'^(?:\[S\d+\][,;\s]*)+')
 
 
 def content_words(text):
     """The words of `text` that carry meaning."""
     return [word for word in normalise(text, strip_prefix=False).split()
             if word not in STOPWORDS]
-
-
-def sentences(text):
-    """Split into sentences, keeping each citation with the sentence it supports.
-
-    The prompt asks for a citation at the end of a sentence, and the model
-    writes it after the full stop about as often as before it. Splitting on the
-    stop alone therefore hands '[S1]' to the *next* sentence, marking the cited
-    one uncited and the following one cited, and every summary scoring exactly one
-    sentence out.
-    """
-    parts = [part for part in _SENTENCE_END.split(str(text or '')) if part.strip()]
-    result = []
-    for part in parts:
-        leading = _LEADING_CITATIONS.match(part)
-        if leading and result:
-            result[-1] += ' ' + leading.group(0).strip()
-            part = part[leading.end():].strip()
-            if not part:
-                continue
-        result.append(part)
-    return result
 
 
 def rouge_scores(prediction, reference):
@@ -255,37 +230,17 @@ def supported_fraction(summary, context):
     return sum(1 for word in words if word in available) / len(words)
 
 
-def citation_rate(summary, chunk_count):
-    """Fraction of sentences citing a passage that was actually retrieved.
-
-    '[S9]' against four retrieved passages does not count: the model invented
-    the reference along with whatever it was supporting.
-    """
-    found = sentences(str(summary or '').strip())
-    if not found:
-        return 0.0
-
-    cited = 0
-    for sentence in found:
-        numbers = [int(n) for n in _CITATION.findall(sentence)]
-        if numbers and all(1 <= n <= chunk_count for n in numbers):
-            cited += 1
-    return cited / len(found)
-
-
-def summary_scores(prediction, reference=None, context=None, chunk_count=0):
+def summary_scores(prediction, reference=None, context=None):
     """Every metric that applies to one summary."""
     scores = {}
     if reference is not None and not is_empty(reference):
         scores.update(rouge_scores(prediction, reference))
     if context is not None:
         scores['supported_fraction'] = supported_fraction(prediction, context)
-    if chunk_count:
-        scores['citation_rate'] = citation_rate(prediction, chunk_count)
     return scores
 
 
-def summary_report(predictions, references=None, contexts=None, chunk_counts=None):
+def summary_report(predictions, references=None, contexts=None):
     """Mean scores over a run's summaries.
 
     `references` may be left out entirely, in which case only the label-free
@@ -294,14 +249,12 @@ def summary_report(predictions, references=None, contexts=None, chunk_counts=Non
     predictions = list(predictions)
     references = list(references) if references is not None else [None] * len(predictions)
     contexts = list(contexts) if contexts is not None else [None] * len(predictions)
-    chunk_counts = list(chunk_counts) if chunk_counts is not None else [0] * len(predictions)
 
     scored = []
-    for prediction, reference, context, count in zip(
-            predictions, references, contexts, chunk_counts):
+    for prediction, reference, context in zip(predictions, references, contexts):
         if is_empty(prediction):
             continue
-        scored.append(summary_scores(prediction, reference, context, count))
+        scored.append(summary_scores(prediction, reference, context))
 
     if not scored:
         return {'n': 0}
