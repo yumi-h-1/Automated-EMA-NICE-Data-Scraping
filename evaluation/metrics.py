@@ -12,8 +12,9 @@ three different kinds of metric:
   2. A date ('EMA date for extension'). Only exact match means anything here;
      a ROUGE score on a date string is noise.
   3. A yes/no judgement (the NICE similarity fields, 'Search Result in NICE').
-     This is binary classification: accuracy, precision, recall, F1 and Cohen's
-     kappa, since class balance is usually skewed.
+     This is binary classification: accuracy, precision, recall and F1. F1 is
+     the one to read, since the 'Yes' class is usually the larger one and
+     accuracy alone flatters a model that answers 'Yes' to everything.
   4. A summary ('What changed'). This is the only output with no single correct
      wording, which is what ROUGE is actually for: n-gram overlap against a
      reference summary written by a health economist. It is also the only output
@@ -175,7 +176,7 @@ def to_label(value):
 
 
 def binary_report(predictions, references):
-    """Accuracy, precision/recall/F1 for the 'Yes' class, and Cohen's kappa."""
+    """Accuracy and precision/recall/F1 for the 'Yes' class."""
     pairs = [(to_label(p), to_label(r)) for p, r in zip(predictions, references)]
     pairs = [(p, r) for p, r in pairs if r is not None]
     if not pairs:
@@ -193,14 +194,8 @@ def binary_report(predictions, references):
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
 
-    # Cohen's kappa: agreement corrected for what chance alone would produce.
-    p_yes = ((tp + fp) / n) * ((tp + fn) / n)
-    p_no = ((tn + fn) / n) * ((tn + fp) / n)
-    chance = p_yes + p_no
-    kappa = (accuracy - chance) / (1 - chance) if chance < 1 else 0.0
-
     return {'n': n, 'accuracy': accuracy, 'precision': precision, 'recall': recall,
-            'f1': f1, 'kappa': kappa, 'unparseable_rate': unusable / n}
+            'f1': f1, 'unparseable_rate': unusable / n}
 
 
 # --- 4. summaries ------------------------------------------------------------
