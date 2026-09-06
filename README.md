@@ -100,11 +100,11 @@ same way.
 | Feature | Type | Description | Source |
 |---|---|---|---|
 | `Full Indication` | String (long free text, `Medicine: …`) | Full therapeutic indication (LLM-extracted) | EPAR page |
-| `New indication HTML` | String (comma-separated spans, or `N/A`) | Newly added indication shown in **bold** (LLM-extracted) | Variation page |
+| `New indication HTML` | String (or `N/A`) | Newly added indication shown in **bold** (LLM-extracted) | Variation page |
 | `New indication PDF` | String (or `N/A`) | Most recently added indication (LLM-extracted) | Procedure steps PDF |
-| `Removed indication HTML` | String (comma-separated spans, or `N/A`) | Removed indication shown in ~~strikethrough~~ (LLM-extracted) | Variation page |
-| `Therapy class` | String (ATC code, 3 characters, e.g. `L01`) | ATC code (first 3 characters) | EPAR page or medicine list |
-| `Therapy Area` | Categorical (one of the lookup table's areas) | Mapped therapy area | Therapy area lookup table |
+| `Removed indication HTML` | String (or `N/A`) | Removed indication shown in ~~strikethrough~~ (LLM-extracted) | Variation page |
+| `Therapy class` | String (ATC code, e.g. `L01`) | ATC code (first 3 characters) | EPAR page or medicine list |
+| `Therapy Area` | Categorical (one of the lookup table's areas, e.g. `C10`) | Mapped therapy area | Therapy area lookup table |
 | `Cancer` | Binary (`Yes` / `No`) | Whether oncology drug (L01/L02) | Derived from therapy class |
 | `Orphan` | Binary (`Yes` / `No`) | Orphan medicine designation | EMA medicine list |
 
@@ -112,8 +112,8 @@ same way.
 
 | Feature | Type | Description | Source |
 |---|---|---|---|
-| `What changed` | String (1-2 sentences, each carrying a numbered source citation) | One or two plain sentences on what this meeting changed | Passages retrieved from the EPAR, variation and NICE pages |
-| `Summary sources` | String (comma-separated list, e.g. `NICE, EPAR indication`) | Which documents the retriever supplied for that summary | Retrieval metadata |
+| `What changed` | String (1-2 sentences) | One or two plain sentences on what this meeting changed | Passages retrieved from the EPAR, variation and NICE pages |
+| `Summary sources` | String (e.g. `NICE, EPAR indication`) | Which documents the retriever supplied for that summary | Retrieval metadata |
 
 ### Regulatory Dates
 
