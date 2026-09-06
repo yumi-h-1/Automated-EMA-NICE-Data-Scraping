@@ -125,12 +125,8 @@ class TestContext:
         assert '[S1] EPAR indication - https://ema.example/k' in context
         assert '[S2] variation' in context and '[S3] variation' in context
 
-    def test_sources_are_listed_once_each(self):
-        assert rag.sources_used(self.CHUNKS) == 'EPAR indication, variation'
-
     def test_no_chunks(self):
         assert rag.format_context([]) == ''
-        assert rag.sources_used([]) == ''
 
 
 class TestSplitting:

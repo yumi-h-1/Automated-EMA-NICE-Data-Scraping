@@ -80,11 +80,10 @@ class TestDiffFragments:
 
 
 class TestAddSummaries:
-    def test_the_columns_are_added(self, prompts):
+    def test_the_column_is_added(self, prompts):
         dataset = DATASET.copy()
         summarise.add_summaries(dataset, PAGES, retriever=FakeRetriever(CHUNKS))
         assert dataset.loc[0, 'What changed'].startswith('Keytruda is now approved')
-        assert dataset.loc[0, 'Summary sources'] == 'variation, NICE'
 
     def test_the_prompt_gets_the_numbered_passages(self, prompts):
         summarise.add_summaries(DATASET.copy(), PAGES, retriever=FakeRetriever(CHUNKS))
@@ -117,9 +116,8 @@ class TestAddSummaries:
 
     def test_a_medicine_with_nothing_indexed_gets_no_summary(self, prompts):
         """Every page for it was empty or failed. Inventing a summary anyway
-        would hide that, so the columns say so and the model is not called."""
+        would hide that, so the column says 'N/A' and the model is not called."""
         dataset = DATASET.copy()
         summarise.add_summaries(dataset, PAGES, retriever=FakeRetriever([]))
         assert dataset.loc[0, 'What changed'] == 'N/A'
-        assert dataset.loc[0, 'Summary sources'] == 'no passages retrieved'
         assert prompts == []

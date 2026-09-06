@@ -56,24 +56,6 @@ class TestSupportedFraction:
         assert metrics.supported_fraction('Keytruda gastric cancer', '') == 0.0
 
 
-class TestCitationRate:
-    def test_every_sentence_cited(self):
-        assert metrics.citation_rate('First sentence. [S1] Second sentence. [S2]', 3) == 1.0
-
-    def test_a_citation_before_the_full_stop_counts_too(self):
-        assert metrics.citation_rate('First sentence [S1]. Second sentence [S2].', 3) == 1.0
-
-    def test_uncited_sentences_are_counted(self):
-        assert metrics.citation_rate('First. [S1] Second, with no citation.', 3) == 0.5
-
-    def test_a_citation_beyond_the_retrieved_passages_does_not_count(self):
-        """[S9] against four passages is an invented reference."""
-        assert metrics.citation_rate('One sentence. [S9]', 4) == 0.0
-
-    def test_empty_summary(self):
-        assert metrics.citation_rate('', 4) == 0.0
-
-
 class TestSummaryReport:
     def test_averages_over_a_run(self):
         report = metrics.summary_report([REFERENCE, REFERENCE],
@@ -86,7 +68,7 @@ class TestSummaryReport:
         assert report['n'] == 1
 
     def test_works_with_no_references_at_all(self):
-        report = metrics.summary_report([REFERENCE], contexts=[CONTEXT], chunk_counts=[1])
+        report = metrics.summary_report([REFERENCE], contexts=[CONTEXT])
         assert report['n'] == 1
         assert 'supported_fraction' in report and 'rougeL_f' not in report
 
@@ -135,7 +117,6 @@ class TestSummaryCheck:
                    'metadata': {'source': 'variation', 'url': ''}}]
         finding = grounding.check_summaries(DATASET, {'keytruda': chunks})[0]
         assert finding['verdict'] == 'grounded'
-        assert finding['citation_rate'] == 1.0
 
     def test_an_invented_summary_is_flagged(self):
         chunks = [{'text': 'Keytruda is indicated for melanoma.',
