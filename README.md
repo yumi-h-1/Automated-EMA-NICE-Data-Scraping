@@ -26,7 +26,7 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
   and indexed in Chroma. Used by the summary step.
 - **Evaluation**. Three types: exact match for the extractions, binary classification, ROUGE-1/2/L for the
   summaries.
-- **Output**. An Excel file, `results/final_EMA_dataset.xlsx`, with 27 columns per
+- **Output**. An Excel file, `results/final_EMA_dataset.xlsx`, with 26 columns per
   medicine. A CSV is written earlier in the run as a checkpoint, before the NICE
   similarity and summary steps, so it holds 22 of those columns rather than all of them.
 
@@ -73,7 +73,7 @@ Three things in that diagram are easy to get backwards:
 
 ## Output Dataset
 
-Each row represents one medicine from the latest CHMP Meeting Highlights. 25 features are collected per medicine across four categories, plus two more when the summary step has run.
+Each row represents one medicine from the latest CHMP Meeting Highlights. 25 features are collected per medicine across four categories, plus one more when the summary step has run.
 
 Every column is written to the Excel file as **text**, dates and Yes/No answers
 included: the pipeline records what the page said rather than a parsed value, so
@@ -113,7 +113,6 @@ same way.
 | Feature | Type | Description | Source |
 |---|---|---|---|
 | `What changed` | String (1-2 sentences) | One or two plain sentences on what this meeting changed | Passages retrieved from the EPAR, variation and NICE pages |
-| `Summary sources` | String (e.g. `NICE, EPAR indication`) | Which documents the retriever supplied for that summary | Retrieval metadata |
 
 ### Regulatory Dates
 
@@ -136,10 +135,9 @@ same way.
 | `New Indication HTML Similarity` | Binary (`Yes` / `No`) | Similarity between new indication (HTML) and NICE text (LLM-scored) | NICE page + EMA |
 | `New Indication PDF Similarity` | Binary (`Yes` / `No`) | Similarity between new indication (PDF) and NICE text (LLM-scored) | NICE page + EMA |
 
-The three similarity fields are a Yes/No judgement, but the prompt also asks the
-model for the matching terms, so the cell reads `Yes. Matching terms: "primary
-hypercholesterolaemia" …`. That is why `metrics.to_label` reads only the first
-word: the label is the answer, and the rest is the model showing its working.
+The prompt for the three similarity fields asks for the bare word, so the cell
+holds `Yes` or `No` and nothing else. `metrics.to_label` still reads only the
+first word, in case a run answers in a sentence anyway.
 
 ---
 
@@ -300,7 +298,6 @@ rephrase. `grounding.check_retrieval` and `check_summaries` report:
 - **`supported_fraction`**: how much of the summary's vocabulary is in the
   passages it was given. Catches what ROUGE cannot: a fluent sentence about a
   trial result no source mentioned.
-- **`citation_rate`**: sentences citing a passage that was really retrieved.
 
 **3. Scored against a gold file, which needs labels.** Four kinds of answer, four
 metrics:
@@ -369,7 +366,7 @@ bad match.
 Every medicine has a reference summary, so this is the only table above with no
 partly labelled column. It is also the row to trust least on its own, for the
 reason above: ROUGE measures wording, not truth, so it is read next to
-`supported_fraction` and `citation_rate` from `grounding.py`.
+`supported_fraction` from `grounding.py`.
 
 One meeting of 16 medicines is a small sample, and four of the columns above rest
 on 6 labels or fewer. These are the numbers for this run, not a general claim
