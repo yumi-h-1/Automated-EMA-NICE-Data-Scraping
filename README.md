@@ -206,15 +206,7 @@ cp .env.example .env        # add your OpenAI key; config.py loads this file
 python run_pipeline.py
 ```
 
-`run_pipeline.py` calls the same functions the notebook calls, in the same
-order. The notebook is for reading the result, the script is for reproducing it. A full run takes roughly two minutes.
-
-```bash
-python run_pipeline.py --no-summaries       # skip retrieval; no heavy dependencies needed
-python run_pipeline.py --output-dir /tmp/x  # write somewhere other than results/
-python run_pipeline.py --no-refresh         # keep the cached EMA medicines table
-python run_pipeline.py --help
-```
+`run_pipeline.py` calls the same functions the notebook calls in the same order.
 
 It exits non-zero if a column that should never be empty came back `N/A`, so it
 can be run on a schedule and its exit status believed.
