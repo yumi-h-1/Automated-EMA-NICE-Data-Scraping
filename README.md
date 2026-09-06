@@ -75,57 +75,71 @@ Three things in that diagram are easy to get backwards:
 
 Each row represents one medicine from the latest CHMP Meeting Highlights. 25 features are collected per medicine across four categories, plus two more when the summary step has run.
 
+Every column is written to the Excel file as **text**, dates and Yes/No answers
+included: the pipeline records what the page said rather than a parsed value, so
+nothing is silently reformatted or coerced. The `Type` column below is what the
+value *means*, and the conversion happens at evaluation time in
+`metrics.parse_date` (dates) and `metrics.to_label` (Yes/No). A field with
+nothing to record holds `N/A`; the LLM-extracted ones may instead hold the
+model's own no-answer reply, `I don't know.`, which `metrics.is_empty` treats the
+same way.
+
 ### Identification
 
-| Feature | Description | Source |
-|---|---|---|
-| `Product Name` | Brand name | CHMP Meeting Highlights |
-| `INN` | Molecule (international non-proprietary name) | CHMP Meeting Highlights |
-| `Marketing authorisation holder` | Company name | CHMP Meeting Highlights |
-| `epar_url` | Link to EPAR page | Generated from product name |
-| `variation_url` | Link to variation page | Scraped from CHMP news |
-| `MH_url` | Link to Meeting Highlights news | CHMP Meeting Highlights |
+| Feature | Type | Description | Source |
+|---|---|---|---|
+| `Product Name` | String | Brand name | CHMP Meeting Highlights |
+| `INN` | String | Molecule (international non-proprietary name) | CHMP Meeting Highlights |
+| `Marketing authorisation holder` | String | Company name | CHMP Meeting Highlights |
+| `epar_url` | String (URL) | Link to EPAR page | Generated from product name |
+| `variation_url` | String (URL) | Link to variation page | Scraped from CHMP news |
+| `MH_url` | String (URL) | Link to Meeting Highlights news | CHMP Meeting Highlights |
 
 ### Clinical
 
-| Feature | Description | Source |
-|---|---|---|
-| `Full Indication` | Full therapeutic indication (LLM-extracted) | EPAR page |
-| `New indication HTML` | Newly added indication shown in **bold** (LLM-extracted) | Variation page |
-| `New indication PDF` | Most recently added indication (LLM-extracted) | Procedure steps PDF |
-| `Removed indication HTML` | Removed indication shown in ~~strikethrough~~ (LLM-extracted) | Variation page |
-| `Therapy class` | ATC code (first 3 characters) | EPAR page or medicine list |
-| `Therapy Area` | Mapped therapy area | Therapy area lookup table |
-| `Cancer` | Whether oncology drug (L01/L02) | Derived from therapy class |
-| `Orphan` | Orphan medicine designation | EMA medicine list |
+| Feature | Type | Description | Source |
+|---|---|---|---|
+| `Full Indication` | String (long free text, `Medicine: …`) | Full therapeutic indication (LLM-extracted) | EPAR page |
+| `New indication HTML` | String (comma-separated spans, or `N/A`) | Newly added indication shown in **bold** (LLM-extracted) | Variation page |
+| `New indication PDF` | String (or `N/A`) | Most recently added indication (LLM-extracted) | Procedure steps PDF |
+| `Removed indication HTML` | String (comma-separated spans, or `N/A`) | Removed indication shown in ~~strikethrough~~ (LLM-extracted) | Variation page |
+| `Therapy class` | String (ATC code, 3 characters, e.g. `L01`) | ATC code (first 3 characters) | EPAR page or medicine list |
+| `Therapy Area` | Categorical (one of the lookup table's areas) | Mapped therapy area | Therapy area lookup table |
+| `Cancer` | Binary (`Yes` / `No`) | Whether oncology drug (L01/L02) | Derived from therapy class |
+| `Orphan` | Binary (`Yes` / `No`) | Orphan medicine designation | EMA medicine list |
 
 ### Summary (optional, added by `summarise.add_summaries`)
 
-| Feature | Description | Source |
-|---|---|---|
-| `What changed` | One or two plain sentences on what this meeting changed | Passages retrieved from the EPAR, variation and NICE pages |
-| `Summary sources` | Which documents the retriever supplied for that summary | Retrieval metadata |
+| Feature | Type | Description | Source |
+|---|---|---|---|
+| `What changed` | String (1-2 sentences, each carrying a numbered source citation) | One or two plain sentences on what this meeting changed | Passages retrieved from the EPAR, variation and NICE pages |
+| `Summary sources` | String (comma-separated list, e.g. `NICE, EPAR indication`) | Which documents the retriever supplied for that summary | Retrieval metadata |
 
 ### Regulatory Dates
 
-| Feature | Description | Source |
-|---|---|---|
-| `Initial Approval` | Initial approval or extension of indication | CHMP Meeting Highlights |
-| `CHMP Opinion Date` | Last day of CHMP meeting | CHMP Meeting Highlights |
-| `Decision date` | European Commission decision date | EMA medicine list |
-| `EMA date for extension` | Date of most recent extension (LLM-extracted) | Procedure steps PDF |
-| `title` | Title of CHMP Meeting Highlights news | CHMP Meeting Highlights |
-| `date` | Date of CHMP Meeting Highlights news | CHMP Meeting Highlights |
+| Feature | Type | Description | Source |
+|---|---|---|---|
+| `Initial Approval` | Categorical (`Initial approval` / `Extension`) | Initial approval or extension of indication | CHMP Meeting Highlights |
+| `CHMP Opinion Date` | Date, `D Month YYYY` (e.g. `23 July 2026`) | Last day of CHMP meeting | CHMP Meeting Highlights |
+| `Decision date` | Date, `DD/MM/YYYY` | European Commission decision date | EMA medicine list |
+| `EMA date for extension` | Date, `DD/MM/YYYY` (or `N/A`) | Date of most recent extension (LLM-extracted) | Procedure steps PDF |
+| `title` | String | Title of CHMP Meeting Highlights news | CHMP Meeting Highlights |
+| `date` | Date, `D Month YYYY` | Date of CHMP Meeting Highlights news | CHMP Meeting Highlights |
 
 ### NICE Comparison
 
-| Feature | Description | Source |
-|---|---|---|
-| `Search Result in NICE` | Whether medicine appears in NICE search | NICE search page |
-| `NICE_url` | NICE search URL for the medicine | Generated from INN |
-| `Full Indication Similarity` | Similarity between EMA full indication and NICE text (LLM-scored) | NICE page + EMA |
-| `New Indication HTML Similarity` | Similarity between new indication (HTML) and NICE text (LLM-scored) | NICE page + EMA |
-| `New Indication PDF Similarity` | Similarity between new indication (PDF) and NICE text (LLM-scored) | NICE page + EMA |
+| Feature | Type | Description | Source |
+|---|---|---|---|
+| `Search Result in NICE` | Binary (`Yes` / `No`, or `N/A` if the page could not be checked) | Whether medicine appears in NICE search | NICE search page |
+| `NICE_url` | String (URL) | NICE search URL for the medicine | Generated from INN |
+| `Full Indication Similarity` | Binary (`Yes` / `No`) followed by free-text matching terms | Similarity between EMA full indication and NICE text (LLM-scored) | NICE page + EMA |
+| `New Indication HTML Similarity` | Binary (`Yes` / `No`) followed by free-text matching terms | Similarity between new indication (HTML) and NICE text (LLM-scored) | NICE page + EMA |
+| `New Indication PDF Similarity` | Binary (`Yes` / `No`) followed by free-text matching terms | Similarity between new indication (PDF) and NICE text (LLM-scored) | NICE page + EMA |
+
+The three similarity fields are a Yes/No judgement, but the prompt also asks the
+model for the matching terms, so the cell reads `Yes. Matching terms: "primary
+hypercholesterolaemia" …`. That is why `metrics.to_label` reads only the first
+word: the label is the answer, and the rest is the model showing its working.
 
 ---
 
