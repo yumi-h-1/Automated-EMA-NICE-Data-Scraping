@@ -132,9 +132,9 @@ same way.
 |---|---|---|---|
 | `Search Result in NICE` | Binary (`Yes` / `No`, or `N/A` if the page could not be checked) | Whether medicine appears in NICE search | NICE search page |
 | `NICE_url` | String (URL) | NICE search URL for the medicine | Generated from INN |
-| `Full Indication Similarity` | Binary (`Yes` / `No`) followed by free-text matching terms | Similarity between EMA full indication and NICE text (LLM-scored) | NICE page + EMA |
-| `New Indication HTML Similarity` | Binary (`Yes` / `No`) followed by free-text matching terms | Similarity between new indication (HTML) and NICE text (LLM-scored) | NICE page + EMA |
-| `New Indication PDF Similarity` | Binary (`Yes` / `No`) followed by free-text matching terms | Similarity between new indication (PDF) and NICE text (LLM-scored) | NICE page + EMA |
+| `Full Indication Similarity` | Binary (`Yes` / `No`) | Similarity between EMA full indication and NICE text (LLM-scored) | NICE page + EMA |
+| `New Indication HTML Similarity` | Binary (`Yes` / `No`) | Similarity between new indication (HTML) and NICE text (LLM-scored) | NICE page + EMA |
+| `New Indication PDF Similarity` | Binary (`Yes` / `No`) | Similarity between new indication (PDF) and NICE text (LLM-scored) | NICE page + EMA |
 
 The three similarity fields are a Yes/No judgement, but the prompt also asks the
 model for the matching terms, so the cell reads `Yes. Matching terms: "primary
