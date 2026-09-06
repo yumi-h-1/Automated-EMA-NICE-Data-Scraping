@@ -18,6 +18,10 @@ Automated pipeline for building a structured regulatory and HTA (Health Technolo
 
 - **GPT-4o mini**. It does two jobs: extracting structured fields from EMA pages, PDFs and NICE pages, and writing the
   `What changed` summary.
+- **Zero-shot prompting**. Every prompt in `scripts/extractors.py` is
+  instruction-only, with no worked examples, and runs at `temperature=0`. The
+  answers are spans copied off the page, so what the model needs is where to
+  look and what format to reply in, not an example to imitate.
 - **`text-embedding-3-small`** - This chunks EMA and NICE pages with LangChain
   and indexed in Chroma. Used by the summary step.
 - **Evaluation**. Three types: exact match for the extractions, binary classification, ROUGE-1/2/L for the
@@ -313,7 +317,7 @@ metrics:
 |---|---|
 | The four indication fields | **Exact match**, with ROUGE-1/2/L and token precision/recall alongside |
 | `EMA date for extension` | **Exact match**, format-tolerant |
-| The three similarity fields | **Accuracy, precision, recall, F1, kappa** |
+| The three similarity fields | **Accuracy, precision, recall, F1** |
 | `What changed` | **ROUGE-1/2/L** against a reference summary, read next to the label-free numbers above |
 
 ROUGE is never the headline. An answer that flips a negation ("is **not**
@@ -325,14 +329,70 @@ with no single correct wording, is read beside `supported_fraction`.
 python evaluation/evaluate.py results/final_EMA_dataset.xlsx evaluation/gold_chmp_2026_07.csv
 ```
 
-`gold_chmp_2026_07.csv` covers the 16 medicines of the July 2026 meeting:
-`What changed` for each, and the two diff columns off the markup; see
-limitation 1. For another meeting, copy `gold_template.csv`.
-`grounding.marked_up_fragments` gives you those two columns, and the rest is
-annotation.
+`gold_chmp_2026_07.csv` covers the 16 medicines of the July 2026 meeting, hand
+annotated across every scored column: `Full Indication` and `What changed` for
+each medicine, the diff columns and `EMA date for extension` where the meeting
+produced one, and the NICE yes/no judgements where a NICE page exists. `N/A`
+means "there was nothing to annotate here", and the report counts it as
+unlabelled rather than as a blank answer the model got right. For another
+meeting, copy `gold_template.csv`. `grounding.marked_up_fragments` gives you the
+two diff columns, and the rest is annotation.
 
 The report prints `labelled=` beside `n=`. A blank reference against a blank
 prediction scores 1.0, correctly, but an unannotated column is all blanks too and
 would otherwise look perfect off no evidence.
+
+`unparseable_rate` sits beside the date and yes/no numbers. It is the share of
+*labelled* rows where the pipeline's own answer could not be read as an answer at
+all: a date in no recognised format, or a NICE judgement that came back blank
+instead of Yes/No. It separates "the model was wrong" from "the model said
+nothing", which accuracy alone merges into a single failure.
+
+### Results, July 2026 meeting
+
+16 medicines, scored against `gold_chmp_2026_07.csv`. `n` is the medicines
+scored, `labelled` the ones the gold file has an answer for.
+
+**Verbatim extraction.** Exact match is the headline; ROUGE says how near the
+misses were.
+
+| Field | labelled | Exact match | ROUGE-L | Token precision | Token recall |
+|---|---|---|---|---|---|
+| `Full Indication` | 16 | 0.500 | 0.858 | 0.980 | 0.811 |
+| `New indication HTML` | 6 | 0.875 | 0.935 | 0.933 | 0.938 |
+| `New indication PDF` | 3 | 0.500 | 0.599 | 0.688 | 0.568 |
+| `Removed indication HTML` | 2 | 0.688 | 0.688 | 0.688 | 0.688 |
+
+`Full Indication` is the pattern worth reading: precision 0.980 against recall
+0.811 means the text it returns is almost always really on the page, and what it
+loses it loses by stopping early. That is the failure you want of the two, and it
+is why exact match sits at 0.500 while ROUGE-L is 0.858 — most misses are a
+truncated indication, not an invented one. The PDF column is the weakest, and the
+smallest: 3 labels is a sample to read by hand, not a number to quote.
+
+**Dates and yes/no judgements.**
+
+| Field | n | Accuracy | Precision | Recall | F1 | Unparseable |
+|---|---|---|---|---|---|---|
+| `EMA date for extension` | 3 | 0.667 | — | — | — | 0.000 |
+| `Search Result in NICE` | 9 | 0.667 | 1.000 | 0.667 | 0.800 | 0.333 |
+| `Full Indication Similarity` | 8 | 0.625 | 1.000 | 0.625 | 0.769 | 0.000 |
+
+Both yes/no fields have precision 1.000 with recall around 0.65: every Yes it
+gives is right, and it misses about a third of them. For `Search Result in NICE`
+the whole gap is the `unparseable_rate` of 0.333 — three medicines where the
+lookup returned nothing at all rather than a wrong answer, so the fix is in
+retrieval, not in the judgement. Note also that the gold file has no `No` rows
+for these fields, so precision is measured against no negatives; it says the Yes
+answers are right, not that the model would refuse a bad match.
+
+**Summary.** `What changed`, all 16 labelled: ROUGE-1 0.554, ROUGE-2 0.394,
+ROUGE-L 0.502. This is the number to trust least on its own, for the reason
+above, and it is read next to `supported_fraction` and `citation_rate` from
+`grounding.py`.
+
+One meeting of 16 medicines is a small sample, and four of the columns above rest
+on 6 labels or fewer. These are the numbers for this run, not a general claim
+about the pipeline.
 
 ---
